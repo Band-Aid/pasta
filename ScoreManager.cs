@@ -44,6 +44,16 @@ public class ScoreManager : MonoBehaviour
         ShowMammaMia();
         UpdateUI();
         CheckArmLevelUp();
+
+        FindObjectOfType<GameManager>()?.OnPastaBroken();
+    }
+
+    public void ResetScore()
+    {
+        Score = 0;
+        ArmLevel = 1;
+        exp = 0f;
+        UpdateUI();
     }
 
     private void ShowMammaMia()

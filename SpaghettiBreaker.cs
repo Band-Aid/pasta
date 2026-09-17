@@ -26,6 +26,7 @@ public class SpaghettiBreaker : MonoBehaviour
     private AudioSource audioSource;
     private float leftAngle;
     private float rightAngle;
+    private bool broken;
 
     private void Awake()
     {
@@ -37,7 +38,6 @@ public class SpaghettiBreaker : MonoBehaviour
         }
         else
         {
-            // ダミークリップ: 折れた気がするためのノイズ生成
             snapSound = AudioClip.Create("snap", 4096, 1, 44100, false, data =>
             {
                 for (int i = 0; i < data.Length; i++)
@@ -59,16 +59,17 @@ public class SpaghettiBreaker : MonoBehaviour
     private float StickToAngle(Vector2 stick)
     {
         if (stick.magnitude < deadZone) return 0f;
-        // デッドゾーン後の値を SNAP 的に丸める
         stick = stick.normalized * Mathf.Max(0, stick.magnitude - snapThreshold);
         return Mathf.Atan2(stick.y, stick.x) * Mathf.Rad2Deg;
     }
 
     /// <summary>
-    /// 固定フレームで折る判定. ExternalBreakTrigger.cs から呼ぶ
+    /// トリガー入力やゲームループから呼ぶ。角度差が閾値を超えたら折る。
     /// </summary>
     public void TryBreak()
     {
+        if (broken) return;
+
         float diff = Mathf.Abs(leftAngle - rightAngle);
         if (diff < breakAngleThreshold) return;
 
@@ -77,14 +78,14 @@ public class SpaghettiBreaker : MonoBehaviour
 
         BreakJoint(breakIndex);
 
-        float quality = diff / 180f;
+        // 角度差が小さいほど高品質。0°で1.0、180°で0.0
+        float quality = Mathf.Clamp01(1f - diff / 180f);
         if (ScoreManager.Instance != null)
             ScoreManager.Instance.OnBreak(quality);
     }
 
     private int FindWeakestJoint()
     {
-        // 最早のジョイントを折る
         for (int i = 0; i < joints.Length; i++)
         {
             if (joints[i] != null) return i;
@@ -97,19 +98,26 @@ public class SpaghettiBreaker : MonoBehaviour
         var joint = joints[index];
         if (joint == null) return;
 
-        // ジョイント切断
-        Object.Destroy(joint);
+        Destroy(joint);
+        joints[index] = null;
+        broken = true;
 
-        // カメラシェイク
         transform.localEulerAngles += Random.Range(-shakeIntensity, shakeIntensity) * Vector3.one;
 
-        // 折れた音
         if (audioSource != null && audioSource.clip != null)
         {
             audioSource.pitch = Random.Range(0.9f, 1.1f);
             audioSource.Play();
         }
 
-        Debug.Log($"[SpaghettiBreaker] ジョイント{index}切断! 角度差: {Mathf.Abs(leftAngle - rightAngle):F1}°");
+        Debug.Log($"[SpaghettiBreaker] ジョイント{index}破断! 角度差: {Mathf.Abs(leftAngle - rightAngle):F1}°");
+    }
+
+    /// <summary>
+    /// 次のパスタ出現時に呼ぶ
+    /// </summary>
+    public void ResetBreak()
+    {
+        broken = false;
     }
 }
