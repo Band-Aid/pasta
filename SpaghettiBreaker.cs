@@ -2,106 +2,114 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// スパゲッティを両手掴み→角度指定→折る。
-/// プロト目的: 折る瞬間の気持ちを検証する。
+/// スパゲッティ折る核心処理
+/// CapsuleCollider×RigidbodyをConfigurableJointで連結、
+/// 両手トリガーで角度超過→折る
 /// </summary>
 public class SpaghettiBreaker : MonoBehaviour
 {
     [Header("構成")]
-    [SerializeField] Rigidbody[] segments;     // CapsuleCollider付きRigidbody達
-    [SerializeField] float breakThreshold = 45f; // この角度差で折る判定
-    [SerializeField] float breakForce = 500f;
+    [SerializeField] private Rigidbody[] segments;
+    [SerializeField] private ConfigurableJoint[] joints;
 
-    [Header("入力")]
-    [SerializeField] InputActionReference leftGrip;
-    [SerializeField] InputActionReference rightGrip;
-    [SerializeField] InputActionReference leftStick;
-    [SerializeField] InputActionReference rightStick;
+    [Header("折る判定")]
+    [SerializeField] private float breakAngleThreshold = 60f;
+    [SerializeField] private float deadZone = 0.15f;
+    [SerializeField] private float snapThreshold = 0.05f;
 
-    bool _leftHolding, _rightHolding;
-    float _leftAngle, _rightAngle;
+    [Header("フィードバック")]
+    [SerializeField] private float shakeIntensity = 3f;
+    [SerializeField] private AudioClip snapSound;
 
-    // デッドゾーンとスナップ閾値。初日から入れるのはお約束通り
-    const float DeadZone = 0.15f;
-    const float SnapThreshold = 0.05f;
+    private Vector2 leftStick;
+    private Vector2 rightStick;
+    private AudioSource audioSource;
+    private float leftAngle;
+    private float rightAngle;
 
-    void OnEnable()
+    private void Awake()
     {
-        leftGrip.action.performed += _ => _leftHolding = true;
-        leftGrip.action.canceled  += _ => _leftHolding = false;
-        rightGrip.action.performed += _ => _rightHolding = true;
-        rightGrip.action.canceled  += _ => _rightHolding = false;
-    }
-
-    void OnDisable()
-    {
-        leftGrip.action.performed -= _ => _leftHolding = true;
-        leftGrip.action.canceled  -= _ => _leftHolding = false;
-        rightGrip.action.performed -= _ => _rightHolding = true;
-        rightGrip.action.canceled  -= _ => _rightHolding = false;
-    }
-
-    void Update()
-    {
-        // スティック入力をデッドゾーン越しに角度に変換
-        Vector2 l = ApplyDeadZone(leftStick.action.ReadValue<Vector2>());
-        Vector2 r = ApplyDeadZone(rightStick.action.ReadValue<Vector2>());
-
-        _leftAngle  = Mathf.Atan2(l.y, l.x) * Mathf.Rad2Deg;
-        _rightAngle = Mathf.Rad2Deg * Mathf.Atan2(r.y, r.x);
-
-        // 両手掴んで角度差が閾値超えたら折る
-        if (_leftHolding && _rightHolding)
+        audioSource = GetComponent<AudioSource>() ?? gameObject.AddComponent<AudioSource>();
+        if (snapSound != null)
         {
-            float diff = Mathf.Abs(_leftAngle - _rightAngle);
-            if (diff > breakThreshold || diff < -breakThreshold)
-                TryBreak();
+            audioSource.clip = snapSound;
+            audioSource.playOnAwake = false;
         }
-    }
-
-    Vector2 ApplyDeadZone(Vector2 v)
-    {
-        if (v.magnitude < DeadZone) return Vector2.zero;
-        // スナップ。小さめの入力を丸めてノイズ防止
-        if (v.magnitude < DeadZone + SnapThreshold)
-            v = v.normalized * (DeadZone + SnapThreshold);
-        float mag = (v.magnitude - DeadZone) / (1f - DeadZone);
-        return v.normalized * mag;
-    }
-
-    void TryBreak()
-    {
-        // 折る瞬間のフィードバックが全て
-        //   1) 即座に音を鳴らす（遅延ゼロが正解）
-        //   2) 画面振動
-        //   3) ジョイント切断
-        AudioSource.PlayClipAtPoint(GetBreakSound(), transform.position);
-        Camera.main.transform.localEulerAngles += new Vector3(Random.Range(-3f, 3f), Random.Range(-3f, 3f), 0f);
-
-        BreakJoints();
-        enabled = false; // プロトなんで折ったら終わり
-    }
-
-    void BreakJoints()
-    {
-        for (int i = 0; i < segments.Length - 1; i++)
+        else
         {
-            var joint = segments[i].GetComponent<ConfigurableJoint>();
-            if (joint != null)
+            // ダミークリップ: 折れた気がするためのノイズ生成
+            snapSound = AudioClip.Create("snap", 4096, 1, 44100, false, data =>
             {
-                Object.Destroy(joint);
-                // 切断面にランダムな力を加えて派手に散る
-                segments[i].AddForceAtPosition(
-                    Random.insideUnitSphere * breakForce,
-                    segments[i].transform.position,
-                    ForceMode.Impulse);
-            }
+                for (int i = 0; i < data.Length; i++)
+                    data[i] = (Random.Range(-1f, 1f)) * Mathf.Exp(-(float)i / 512f);
+            });
+            audioSource.clip = snapSound;
         }
     }
 
-    AudioClip GetBreakSound()
+    public void OnLeftStick(InputAction.CallbackContext ctx) => leftStick = ctx.ReadValue<Vector2>();
+    public void OnRightStick(InputAction.CallbackContext ctx) => rightStick = ctx.ReadValue<Vector2>();
+
+    private void Update()
     {
-        // プロト中はどれでも良いが、後で「折れた時の音效リスト」に差し替え
-        return AudioClip.Create("snap", 1, 1, 44100, false);
+        leftAngle = StickToAngle(leftStick);
+        rightAngle = StickToAngle(rightStick);
+    }
+
+    private float StickToAngle(Vector2 stick)
+    {
+        if (stick.magnitude < deadZone) return 0f;
+        // デッドゾーン後の値を SNAP 的に丸める
+        stick = stick.normalized * Mathf.Max(0, stick.magnitude - snapThreshold);
+        return Mathf.Atan2(stick.y, stick.x) * Mathf.Rad2Deg;
+    }
+
+    /// <summary>
+    /// 固定フレームで折る判定. ExternalBreakTrigger.cs から呼ぶ
+    /// </summary>
+    public void TryBreak()
+    {
+        float diff = Mathf.Abs(leftAngle - rightAngle);
+        if (diff < breakAngleThreshold) return;
+
+        int breakIndex = FindWeakestJoint();
+        if (breakIndex < 0) return;
+
+        BreakJoint(breakIndex);
+
+        float quality = diff / 180f;
+        if (ScoreManager.Instance != null)
+            ScoreManager.Instance.OnBreak(quality);
+    }
+
+    private int FindWeakestJoint()
+    {
+        // 最早のジョイントを折る
+        for (int i = 0; i < joints.Length; i++)
+        {
+            if (joints[i] != null) return i;
+        }
+        return -1;
+    }
+
+    private void BreakJoint(int index)
+    {
+        var joint = joints[index];
+        if (joint == null) return;
+
+        // ジョイント切断
+        Object.Destroy(joint);
+
+        // カメラシェイク
+        transform.localEulerAngles += Random.Range(-shakeIntensity, shakeIntensity) * Vector3.one;
+
+        // 折れた音
+        if (audioSource != null && audioSource.clip != null)
+        {
+            audioSource.pitch = Random.Range(0.9f, 1.1f);
+            audioSource.Play();
+        }
+
+        Debug.Log($"[SpaghettiBreaker] ジョイント{index}切断! 角度差: {Mathf.Abs(leftAngle - rightAngle):F1}°");
     }
 }
