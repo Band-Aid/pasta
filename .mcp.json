@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "blender": {
+      "command": "uvx",
+      "args": [
+        "--python",
+        "3.12",
+        "blender-mcp"
+      ],
+      "env": {
+        "BLENDER_MCP_URL": "http://127.0.0.1:9876"
+      }
+    }
+  }
+}
