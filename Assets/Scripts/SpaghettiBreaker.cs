@@ -7,6 +7,8 @@ public class SpaghettiBreaker : MonoBehaviour
     [SerializeField] private Rigidbody[] segments;
     [SerializeField] private ConfigurableJoint[] joints;
     [SerializeField] private float breakAngleThreshold = 60f;
+    // Diff (deg) at which the mesh reaches its full fold, so the strand visibly strains before snapping.
+    [SerializeField] private float visualSnapBend = 80f;
     [SerializeField] private AudioClip snapSound;
     private PastaVisual visual;
     private AudioSource sound, creak;
@@ -51,7 +53,8 @@ public class SpaghettiBreaker : MonoBehaviour
     {
         if (IsBroken || Mathf.Approximately(currentDiff, diff)) return;
         currentDiff = Mathf.Clamp(diff, 0f, 150f);
-        visual?.Bend(currentDiff / 150f);
+        // Mesh fold runs ahead of the meter: full fold at visualSnapBend, well before the snap window ends.
+        visual?.Bend(Mathf.Clamp01(currentDiff / visualSnapBend));
         creak.volume = currentDiff < 8f ? 0f : Mathf.Lerp(0.025f, 0.21f, currentDiff / 150f);
         creak.pitch = Mathf.Lerp(0.7f, 1.9f, currentDiff / 150f);
         if (currentDiff >= breakAngleThreshold && !readyCue)
