@@ -5,9 +5,7 @@ using UnityEngine;
 public enum EnemyType { Normal, Fast, Tough }
 
 /// <summary>
-/// 迫ってくるイタリアン。プレイヤーへ歩き、接近するとダメージ。
-/// 衝撃波を浴びると Hit() でHPが減り、0になると Kill() で吹っ飛んで退場。
-/// 敵種で速度/HP/大きさ/色が変わる（Normal/Fast/Tough）。
+/// 接近・攻撃・挑発への移動。発射された敵は次の敵へ連鎖する弾になる。
 /// </summary>
 public class Enemy : MonoBehaviour
 {
@@ -33,14 +31,28 @@ public class Enemy : MonoBehaviour
     private Rigidbody rb;
     private CapsuleCollider col;
     private AudioSource audioSource;
-    private AudioClip screamClip;
+    private static AudioClip screamClip;
     private Renderer bodyRend;
     private bool dead;
     private float nextAttack;
     private float bobSeed;
     private float baseY;
     private float staggerUntil;
+    private float windupUntil;
+    private Vector3 headHome;
+    private TextMesh warning;
+    public bool IsWindingUp => !dead && windupUntil > 0f;
+    public float AttackProgress => IsWindingUp ? 1f - Mathf.Clamp01((windupUntil - Time.time) / 0.6f) : 0f;
     private Vector3 staggerVel;
+    private DominoShot shot;
+    private Vector3 flightDirection;
+    private Vector3 flightPosition, fullScale = Vector3.one;
+    private float flightRemaining, flightElapsed;
+    private float lureUntil;
+    private Vector3 lurePoint;
+    private static Material trailMaterial;
+    public bool IsFlying => dead && flightRemaining > 0f;
+    public bool IsLured => !dead && Time.time < lureUntil;
     private Vector3 eyeScale = Vector3.one;
     private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
@@ -55,9 +67,22 @@ public class Enemy : MonoBehaviour
         audioSource.playOnAwake = false;
         audioSource.spatialBlend = 0.6f;
         audioSource.maxDistance = 40f;
-        screamClip = BuildScream();
+        if (screamClip == null) screamClip = BuildScream();
         bobSeed = Random.value * 10f;
         if (leftEye != null) eyeScale = leftEye.localScale;
+        if (head != null)
+        {
+            var face = new GameObject("Face rig").transform;
+            face.SetParent(transform, false);
+            face.localPosition = head.localPosition;
+            string[] parts = { "Head", "Hair", "Nose", "MoustL", "MoustR", "BrowL", "BrowR", "EyeL", "EyeR" };
+            foreach (var name in parts)
+            {
+                var part = transform.Find(name);
+                if (part != null) part.SetParent(face, true);
+            }
+            head = face;
+        }
         var body = transform.Find("Body");
         if (body != null) bodyRend = body.GetComponent<Renderer>();
     }
@@ -68,6 +93,19 @@ public class Enemy : MonoBehaviour
     private void Start()
     {
         baseY = transform.position.y;
+        if (head != null) headHome = head.localPosition;
+        var marker = new GameObject("Attack warning");
+        marker.transform.SetParent(transform, false);
+        marker.transform.localPosition = Vector3.up * 2.35f;
+        warning = marker.AddComponent<TextMesh>();
+        warning.text = "!";
+        warning.font = shoutFont;
+        warning.fontSize = 64;
+        warning.characterSize = 0.045f;
+        warning.anchor = TextAnchor.MiddleCenter;
+        warning.color = new Color(1f, 0.32f, 0.1f);
+        if (shoutFont != null) marker.GetComponent<MeshRenderer>().sharedMaterial = shoutFont.material;
+        warning.gameObject.SetActive(false);
         StartCoroutine(SpawnPop());
     }
 
@@ -92,6 +130,7 @@ public class Enemy : MonoBehaviour
                 transform.localScale = Vector3.one;
                 break;
         }
+        fullScale = transform.localScale;
     }
 
     private void Tint(Color c)
@@ -121,28 +160,46 @@ public class Enemy : MonoBehaviour
             Vector3 sp = transform.position + staggerVel * Time.deltaTime;
             sp.y = baseY;
             transform.position = sp;
-            staggerVel *= 0.9f;
+            staggerVel *= Mathf.Exp(-6f * Time.deltaTime);
             return;
         }
 
-        Vector3 to = player.position - transform.position; to.y = 0f;
+        Vector3 to = (IsLured ? lurePoint : player.position) - transform.position; to.y = 0f;
         float dist = to.magnitude;
+        if (windupUntil > 0f)
+        {
+            if (Time.time >= windupUntil)
+            {
+                windupUntil = 0f;
+                warning.gameObject.SetActive(false);
+                if (dist <= attackRange + 0.35f) PlayerController.Instance?.TakeDamage(attackDamage);
+                nextAttack = Time.time + attackInterval;
+                if (head != null) head.localPosition = headHome;
+            }
+            else
+            {
+                if (head != null) head.localPosition = headHome + Vector3.back * AttackProgress * 0.18f;
+                warning.transform.localScale = Vector3.one * (1f + AttackProgress * 0.7f);
+                if (Camera.main != null) warning.transform.rotation = Camera.main.transform.rotation;
+            }
+            return;
+        }
 
         if (to.sqrMagnitude > 0.0001f)
             transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(to), 8f * Time.deltaTime);
 
-        if (dist > attackRange)
+        if (IsLured || dist > attackRange)
         {
-            Vector3 move = to.normalized * moveSpeed + Separation() * 2.2f;
+            Vector3 move = to.normalized * (IsLured ? Mathf.Min(dist * 3f, moveSpeed * 2.5f) : moveSpeed)
+                + Separation() * (IsLured ? 0.35f : 2.2f);
             Vector3 p = transform.position + move * Time.deltaTime;
             p.y = baseY + Mathf.Abs(Mathf.Sin(Time.time * (Type == EnemyType.Fast ? 12f : 8f) + bobSeed)) * 0.09f;
             transform.position = p;
         }
         else if (Time.time >= nextAttack)
         {
-            nextAttack = Time.time + attackInterval;
-            PlayerController.Instance?.TakeDamage(attackDamage);
-            StartCoroutine(Jab());
+            windupUntil = Time.time + 0.6f;
+            warning.gameObject.SetActive(true);
         }
     }
 
@@ -158,22 +215,6 @@ public class Enemy : MonoBehaviour
             if (m > 0.001f && m < 1.3f) sum += d / m * (1.3f - m);
         }
         return sum;
-    }
-
-    private IEnumerator Jab()
-    {
-        Vector3 start = transform.position;
-        Vector3 to = (player.position - transform.position); to.y = 0f;
-        Vector3 lunge = start + to.normalized * 0.35f;
-        float t = 0f;
-        while (t < 1f && !dead && Time.time >= staggerUntil)
-        {
-            t += Time.deltaTime * 6f;
-            float e = Mathf.Sin(Mathf.Clamp01(t) * Mathf.PI);
-            var p = Vector3.Lerp(start, lunge, e); p.y = baseY;
-            if (transform.position.y <= baseY + 0.2f) transform.position = p;
-            yield return null;
-        }
     }
 
     private IEnumerator SpawnPop()
@@ -204,8 +245,110 @@ public class Enemy : MonoBehaviour
         return false;
     }
 
+    public void Lure(Vector3 point, float duration)
+    {
+        if (dead) return;
+        lurePoint = point;
+        lureUntil = Time.time + duration;
+        windupUntil = 0f;
+        if (warning != null) warning.gameObject.SetActive(false);
+        if (head != null) head.localPosition = headHome;
+    }
+
+    public bool Launch(DominoShot domino, Vector3 direction, bool collision = false)
+    {
+        if (dead) return false;
+        // Heavy enemies resist weak direct shots, but any flying enemy breaks their guard.
+        if (!collision && Type == EnemyType.Tough && domino.Tier < 3)
+        {
+            hp -= domino.Tier;
+            if (hp > 0) { Stagger(transform.position - direction); return false; }
+        }
+        dead = true;
+        shot = domino;
+        Alive.Remove(this);
+        StopAllCoroutines();
+        transform.localScale = fullScale;
+        windupUntil = 0f;
+        if (warning != null) warning.gameObject.SetActive(false);
+        if (head != null) head.localPosition = headHome;
+        rb.isKinematic = true;
+        if (col != null) col.enabled = false;
+        direction.y = 0f;
+        flightDirection = direction.sqrMagnitude > 0.001f ? direction.normalized : Vector3.forward;
+        flightRemaining = shot.Travel;
+        flightElapsed = 0f;
+        flightPosition = transform.position;
+        flightPosition.y = baseY;
+        PopEyes(2.1f);
+        Scream(shot.Tier);
+        if (!collision) Shout(shot.Tier);
+        if (trailMaterial == null) trailMaterial = new Material(Resources.Load<Shader>("SnapWave"));
+        var trail = new GameObject("Domino trail").AddComponent<TrailRenderer>();
+        trail.transform.SetParent(transform, false);
+        trail.transform.localPosition = Vector3.up;
+        trail.sharedMaterial = trailMaterial;
+        trail.time = 0.22f;
+        trail.startWidth = 0.35f;
+        trail.endWidth = 0f;
+        trail.startColor = new Color(1f, 0.8f, 0.2f, 0.9f);
+        trail.endColor = new Color(1f, 0.4f, 0.1f, 0f);
+        shot.Register(collision);
+        return true;
+    }
+
+    private void FixedUpdate()
+    {
+        if (!IsFlying || (GameManager.Instance != null && !GameManager.Instance.IsPlaying)) return;
+        Vector3 from = flightPosition;
+        float step = Mathf.Min(flightRemaining, shot.Speed * Time.fixedDeltaTime);
+        Vector3 to = from + flightDirection * step;
+        // Stop at scenery; enemy colliders are intentionally handled by the swept test below.
+        foreach (var hit in Physics.RaycastAll(from + Vector3.up * 0.8f, flightDirection, step, ~0, QueryTriggerInteraction.Ignore))
+        {
+            if (hit.collider.GetComponentInParent<Enemy>() != null
+                || hit.collider.GetComponentInParent<PlayerController>() != null
+                || hit.collider.GetComponentInParent<PastaFragment>() != null) continue;
+            step = Mathf.Min(step, Mathf.Max(0f, hit.distance - 0.1f));
+            to = from + flightDirection * step;
+            flightRemaining = step;
+        }
+        foreach (var target in Alive.ToArray())
+        {
+            if (target == null || !DominoShot.SweptHit(from, to, target.transform.position, shot.Width)) continue;
+            Vector3 direction = flightDirection * 0.8f + (target.transform.position - from).normalized * 0.2f;
+            if (target.Launch(shot, direction, true))
+            {
+                PlayerController.Instance?.OnDominoImpact();
+                var impact = new GameObject("Domino impact").AddComponent<Shockwave>();
+                impact.Play(new BlastSpec { kind = BlastKind.Cone, origin = target.transform.position,
+                    forward = flightDirection, radius = 1.8f, halfAngleDeg = 180f, tier = 3 });
+            }
+        }
+        flightRemaining -= step;
+        flightElapsed += Time.fixedDeltaTime;
+        flightPosition = to;
+        transform.Rotate(Vector3.right, 580f * Time.fixedDeltaTime, Space.Self);
+        // Rotate around the body's centre while hit detection follows a stable ground path.
+        float center = fullScale.y * 1.05f;
+        float hop = Mathf.Sin(Mathf.Clamp01(flightElapsed / 0.8f) * Mathf.PI) * 0.7f;
+        transform.position = to + Vector3.up * (center + hop) - transform.up * center;
+        if (flightRemaining <= 0.001f)
+        {
+            flightRemaining = 0f;
+            rb.isKinematic = false;
+            if (col != null) col.enabled = true;
+            rb.linearVelocity = flightDirection * 2f + Vector3.up * 3f;
+            rb.angularVelocity = Random.onUnitSphere * 5f;
+            StartCoroutine(Despawn(0.8f));
+        }
+    }
+
     private void Stagger(Vector3 origin)
     {
+        windupUntil = 0f;
+        if (warning != null) warning.gameObject.SetActive(false);
+        if (head != null) head.localPosition = headHome;
         staggerUntil = Time.time + 0.35f;
         Vector3 away = transform.position - origin; away.y = 0f;
         if (away.sqrMagnitude < 0.01f) away = -transform.forward;
@@ -222,6 +365,8 @@ public class Enemy : MonoBehaviour
     {
         if (dead) return;
         dead = true;
+        windupUntil = 0f;
+        if (warning != null) warning.gameObject.SetActive(false);
         Alive.Remove(this);
         StopAllCoroutines();
 

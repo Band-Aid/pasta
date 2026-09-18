@@ -1,142 +1,90 @@
 using UnityEngine;
 
-/// <summary>
-/// プレイヤーが持つパスタ。曲げ角(diff)は PastaHand から SetBend() で与えられ、
-/// 折る瞬間の角度から品質(0..1)を返す。折れるとセグメントが物理で弾け飛ぶ。
-/// </summary>
+/// <summary>Continuous dry pasta while held; capped physical fragments after snapping.</summary>
 public class SpaghettiBreaker : MonoBehaviour
 {
-    [Header("構成")]
+    // Preserve references in existing prototype prefabs; their coarse geometry is hidden at runtime.
     [SerializeField] private Rigidbody[] segments;
     [SerializeField] private ConfigurableJoint[] joints;
-
-    [Header("折る判定")]
     [SerializeField] private float breakAngleThreshold = 60f;
-
-    [Header("見た目のしなり")]
-    [SerializeField] private float maxFoldDeg = 52f; // 最大曲げ時の各半分の折り角
-
-    [Header("フィードバック")]
     [SerializeField] private AudioClip snapSound;
-
-    private AudioSource audioSource;
-    private bool broken;
+    private PastaVisual visual;
+    private AudioSource sound, creak;
+    private bool readyCue;
     private float currentDiff;
-    private Quaternion[] segHomeRot;
-    private Vector3[] segHomePos;
-
     public float CurrentDiff => currentDiff;
     public float BreakAngleThreshold => breakAngleThreshold;
-    public bool IsBroken => broken;
+    public float PerfectEnd => breakAngleThreshold + 26f;
+    public float GoodEnd => PerfectEnd + 28f;
+    public bool IsBroken { get; private set; }
+    public Vector3 LeftGrip => visual != null ? visual.Point(-1f) : Vector3.left * 0.25f;
+    public Vector3 RightGrip => visual != null ? visual.Point(1f) : Vector3.right * 0.25f;
 
     private void Awake()
     {
-        audioSource = GetComponent<AudioSource>() ?? gameObject.AddComponent<AudioSource>();
-        audioSource.playOnAwake = false;
-        if (snapSound == null)
-        {
-            snapSound = AudioClip.Create("snap", 4096, 1, 44100, false, data =>
-            {
-                for (int i = 0; i < data.Length; i++)
-                    data[i] = Random.Range(-1f, 1f) * Mathf.Exp(-(float)i / 512f);
-            });
-        }
-        audioSource.clip = snapSound;
-
+        foreach (var renderer in GetComponentsInChildren<Renderer>()) renderer.enabled = false;
         if (segments != null)
-        {
-            segHomeRot = new Quaternion[segments.Length];
-            segHomePos = new Vector3[segments.Length];
-            for (int i = 0; i < segments.Length; i++)
-            {
-                if (segments[i] == null) continue;
-                segHomeRot[i] = segments[i].transform.localRotation;
-                segHomePos[i] = segments[i].transform.localPosition;
-                // 保持中はコライダーを切る（プレイヤーのCharacterControllerと干渉しないように）
-                var col = segments[i].GetComponent<Collider>();
-                if (col != null) col.enabled = false;
-            }
-        }
+            foreach (var segment in segments)
+                if (segment != null)
+                {
+                    segment.isKinematic = true;
+                    foreach (var collider in segment.GetComponents<Collider>()) collider.enabled = false;
+                }
+        sound = GetComponent<AudioSource>() ?? gameObject.AddComponent<AudioSource>();
+        sound.playOnAwake = false;
+        sound.spatialBlend = 0f;
+        creak = gameObject.AddComponent<AudioSource>();
+        creak.playOnAwake = false;
+        creak.loop = true;
+        creak.clip = PastaAudio.Creak;
+        creak.volume = 0f;
+        creak.Play();
     }
 
-    /// <summary>曲げ角(0..180°)を与える。見た目もしなる。</summary>
+    public void Configure(PastaType type)
+    {
+        visual = gameObject.AddComponent<PastaVisual>();
+        visual.Initialize(type);
+    }
+
     public void SetBend(float diff)
     {
-        currentDiff = Mathf.Clamp(diff, 0f, 180f);
-        if (!broken) ApplyVisualBend();
-    }
-
-    /// <summary>両端（手）を保持したまま、中央がV字にたわむ折り。左右の半分を外端まわりに回す。</summary>
-    private void ApplyVisualBend()
-    {
-        if (segments == null || segHomePos == null) return;
-        int n = segments.Length;
-        if (n < 2) return;
-
-        float theta = Mathf.Clamp01(currentDiff / 150f) * maxFoldDeg;
-        Vector3 leftPivot = segHomePos[0];       // 左端（左手の位置）
-        Vector3 rightPivot = segHomePos[n - 1];  // 右端（右手の位置）
-        int half = n / 2;
-
-        for (int i = 0; i < n; i++)
+        if (IsBroken || Mathf.Approximately(currentDiff, diff)) return;
+        currentDiff = Mathf.Clamp(diff, 0f, 150f);
+        visual?.Bend(currentDiff / 150f);
+        creak.volume = currentDiff < 8f ? 0f : Mathf.Lerp(0.025f, 0.21f, currentDiff / 150f);
+        creak.pitch = Mathf.Lerp(0.7f, 1.9f, currentDiff / 150f);
+        if (currentDiff >= breakAngleThreshold && !readyCue)
         {
-            if (segments[i] == null) continue;
-            bool left = i < half;
-            float sign = left ? -1f : 1f; // 内側の端が下がってV字になる
-            Vector3 pivot = left ? leftPivot : rightPivot;
-            Quaternion rot = Quaternion.Euler(0f, 0f, sign * theta);
-            segments[i].transform.localPosition = pivot + rot * (segHomePos[i] - pivot);
-            segments[i].transform.localRotation = rot * segHomeRot[i];
+            readyCue = true;
+            sound.PlayOneShot(PastaAudio.Ready, 0.28f);
         }
+        if (currentDiff < breakAngleThreshold) readyCue = false;
     }
 
-    /// <summary>今の曲げ角で折れれば品質(0..1)を返す。折れなければ-1。閾値ギリギリで1.0、180°で0.0。</summary>
+    public float QualityAt(float angle)
+    {
+        if (angle < breakAngleThreshold) return -1f;
+        if (angle <= PerfectEnd) return 1f;
+        if (angle <= GoodEnd) return 0.78f;
+        return 0.35f;
+    }
+
     public float TryBreak()
     {
-        if (broken) return -1f;
-        if (currentDiff < breakAngleThreshold) return -1f;
-
-        int idx = FindWeakestJoint();
-        if (idx < 0) return -1f;
-
-        BreakJoint(idx);
-        return Mathf.Clamp01(1f - (currentDiff - breakAngleThreshold) / (180f - breakAngleThreshold));
+        if (IsBroken) return -1f;
+        float quality = QualityAt(currentDiff);
+        if (quality < 0f) return quality;
+        IsBroken = true;
+        creak.Stop();
+        sound.pitch = Random.Range(0.94f, 1.06f);
+        sound.PlayOneShot(snapSound != null ? snapSound : PastaAudio.Snap, 0.85f);
+        return quality;
     }
 
-    private int FindWeakestJoint()
-    {
-        for (int i = 0; i < joints.Length; i++)
-            if (joints[i] != null) return i;
-        return -1;
-    }
-
-    private void BreakJoint(int index)
-    {
-        var joint = joints[index];
-        if (joint == null) return;
-        Destroy(joint);
-        joints[index] = null;
-        broken = true;
-        if (audioSource != null && audioSource.clip != null)
-        {
-            audioSource.pitch = Random.Range(1.0f, 1.25f);
-            audioSource.Play();
-        }
-    }
-
-    /// <summary>折った後、全セグメントを物理解放して弾き飛ばす</summary>
     public void Release(Vector3 impulse)
     {
-        if (segments == null) return;
-        foreach (var rb in segments)
-        {
-            if (rb == null) continue;
-            var col = rb.GetComponent<Collider>();
-            if (col != null) col.enabled = true; // 放り投げた破片は地面や建物で弾む
-            rb.isKinematic = false;
-            rb.interpolation = RigidbodyInterpolation.Interpolate; // 飛ぶ間だけ補間
-            rb.AddForce(impulse + Random.insideUnitSphere * 0.5f, ForceMode.Impulse);
-            rb.AddTorque(Random.insideUnitSphere * 3f, ForceMode.Impulse);
-        }
+        creak.Stop();
+        visual?.Shatter(impulse);
     }
 }

@@ -1,97 +1,120 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>
-/// スコア・撃破数・コンボ・腕レベルを管理。1回の衝撃波の撃破数でボーナスが伸びる。
-/// UIの数値表示はHudが行い、ここは状態管理と「MAMMA MIA!」ポップアップを担う。
-/// </summary>
 public class ScoreManager : MonoBehaviour
 {
     public static ScoreManager Instance { get; private set; }
-
     public int Score { get; private set; }
     public int Kills { get; private set; }
     public int BestCombo { get; private set; }
-    public int ArmLevel { get; private set; } = 1;
-    private float exp;
-
-    [Header("ポップアップ")]
+    public int ArmLevel => 1 + PerfectStreak / 3;
+    public int Combo { get; private set; }
+    public int PerfectStreak { get; private set; }
+    public int BestStreak { get; private set; }
+    public int DominoKills { get; private set; }
+    public int BestDomino { get; private set; }
+    public float ComboRemaining => Mathf.Clamp01((comboUntil - Time.time) / 4.5f);
+    public string Feedback { get; private set; }
+    public Color FeedbackColor { get; private set; }
+    public float FeedbackRemaining => Mathf.Clamp01((feedbackUntil - Time.unscaledTime) / 1.1f);
+    public float Multiplier => 1f + Mathf.Min(Combo, 8) * 0.25f;
     [SerializeField] private GameObject popup;
     [SerializeField] private Text popupText;
+    private float comboUntil, feedbackUntil;
+    private bool inputHint;
 
-    private void Awake()
+    private void Awake() => Instance = this;
+    private void Start() { if (popup != null) popup.SetActive(false); }
+
+    private void Update()
     {
-        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
-        Instance = this;
+        if (GameManager.Instance != null && !GameManager.Instance.IsPlaying) return;
+        if (Combo > 0 && Time.time > comboUntil) BreakCombo();
     }
 
-    private void Start()
+    public void OnBreak(int kills, int tier, float quality, float scoreMul = 1f, int closeCalls = 0)
     {
-        if (popup != null) popup.SetActive(false);
-    }
-
-    /// <summary>PastaHandから折る成功時に呼ぶ。kills=この衝撃波の撃破数、scoreMul=狙い撃ち等のボーナス倍率</summary>
-    public void OnBreak(int kills, int tier, float quality, float scoreMul = 1f)
-    {
-        exp += quality;
-        CheckArmLevelUp();
-
         if (kills <= 0)
         {
-            ShowPopup("空振り…", new Color(1f, 1f, 1f, 0.6f), 0.7f);
+            BreakCombo();
+            Show(PastaHand.Instance != null && PastaHand.Instance.Overbent ? "溜めすぎ！" : "届かない！  もう少し引きつけよう", new Color(1f, 0.68f, 0.45f));
+            inputHint = true;
             return;
         }
-
+        Combo++;
+        comboUntil = Time.time + 4.5f;
+        PerfectStreak = tier == 3 ? PerfectStreak + 1 : 0;
+        BestStreak = Mathf.Max(BestStreak, Combo);
         Kills += kills;
-        if (kills > BestCombo) BestCombo = kills;
-
-        // 撃破数が多いほどコンボ倍率が伸びる（1体=1.0、2体=1.5、3体=2.0…）×狙い撃ちボーナス
-        float comboMul = 1f + (kills - 1) * 0.5f;
-        int points = Mathf.RoundToInt(kills * (60 + tier * 40) * comboMul * scoreMul);
+        BestCombo = Mathf.Max(BestCombo, kills);
+        float groupBonus = 1f + (kills - 1) * 0.4f;
+        int points = Mathf.RoundToInt(kills * (60 + tier * 40) * groupBonus * Multiplier * scoreMul) + closeCalls * 150;
         Score += points;
+        string title = tier == 3 ? "PERFETTO!" : tier == 2 ? "BUONO!" : "CRACK!";
+        if (kills >= 3) title = "MAMMA MIA!";
+        string counter = closeCalls > 0 ? "  ギリギリ撃退！" : "";
+        Show($"{title}  +{points:N0}\n{kills}人まとめて撃退{counter}",
+            tier == 3 ? new Color(1f, 0.83f, 0.35f) : new Color(0.85f, 1f, 0.83f));
+    }
 
-        if (kills >= 5) ShowPopup($"MAMMA MIA!!! ×{kills}", new Color(1f, 0.15f, 0.1f), 1.2f);
-        else if (kills >= 3) ShowPopup($"MAMMA MIA! ×{kills}", new Color(1f, 0.45f, 0.1f), 1.1f);
-        else if (kills == 2) ShowPopup("Doppio! ×2", new Color(0.5f, 1f, 0.5f), 1f);
-        else ShowPopup("Colpito!", Color.white, 0.9f);
+    public void TooEarly()
+    {
+        Show("まだ折れない  →  金色で離す", new Color(1f, 0.92f, 0.72f));
+        inputHint = true;
+    }
+
+    public void OnDomino(DominoShot shot)
+    {
+        Kills++;
+        DominoKills++;
+        BestDomino = Mathf.Max(BestDomino, shot.Hits);
+        BestCombo = Mathf.Max(BestCombo, shot.Hits);
+        int points = 200 + Mathf.Min(shot.Collisions, 12) * 100;
+        Score += points;
+        comboUntil = Time.time + 4.5f;
+        Show($"{shot.Hits} 人連鎖！  +{points:N0}\n敵をぶつけて DOMINO!", new Color(1f, 0.83f, 0.35f));
+    }
+
+    public void Announce(string message) => Show(message, new Color(0.65f, 1f, 0.85f));
+
+    public void ClearInputHint()
+    {
+        if (inputHint) feedbackUntil = 0f;
+        inputHint = false;
+    }
+
+    public void BreakCombo()
+    {
+        Combo = 0;
+        PerfectStreak = 0;
+        comboUntil = 0f;
+    }
+
+    public void WaveClear(int wave)
+    {
+        comboUntil = Time.time + 7f;
+        int bonus = wave * 200;
+        Score += bonus;
+        Show($"ROUND CLEAR  +{bonus:N0}\nひと息。HP +15", new Color(0.65f, 1f, 0.78f));
+    }
+
+    private void Show(string message, Color color)
+    {
+        inputHint = false;
+        Feedback = message;
+        FeedbackColor = color;
+        feedbackUntil = Time.unscaledTime + 1.5f;
+        // Hud presents this in one consistent location rather than stacking multiple banners.
+        if (popup != null) popup.SetActive(false);
     }
 
     public void ResetScore()
     {
-        Score = 0;
-        Kills = 0;
-        BestCombo = 0;
-        ArmLevel = 1;
-        exp = 0f;
+        Score = Kills = BestCombo = BestStreak = 0;
+        DominoKills = BestDomino = 0;
+        BreakCombo();
+        Feedback = "";
+        feedbackUntil = 0f;
         if (popup != null) popup.SetActive(false);
-    }
-
-    private void ShowPopup(string text, Color color, float scale)
-    {
-        if (popup == null) return;
-        if (popupText != null)
-        {
-            popupText.text = text;
-            popupText.color = color;
-            popupText.transform.localScale = Vector3.one * scale;
-        }
-        popup.SetActive(true);
-        CancelInvoke(nameof(HidePopup));
-        Invoke(nameof(HidePopup), 1.1f);
-    }
-
-    private void HidePopup()
-    {
-        if (popup != null) popup.SetActive(false);
-    }
-
-    private void CheckArmLevelUp()
-    {
-        float threshold = ArmLevel * 5f;
-        if (exp >= threshold)
-        {
-            exp -= threshold;
-            ArmLevel++;
-        }
     }
 }

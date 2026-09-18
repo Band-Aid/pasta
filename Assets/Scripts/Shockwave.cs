@@ -2,126 +2,128 @@ using UnityEngine;
 
 public enum BlastKind { Cone, Line }
 
-/// <summary>衝撃波の形。Cone=円/扇（半径＋半角）、Line=貫通ビーム（長さ＋半幅）</summary>
 public struct BlastSpec
 {
     public BlastKind kind;
-    public Vector3 origin;
-    public Vector3 forward;
-    public float radius;
-    public float halfAngleDeg; // 180で全周
-    public float length;
-    public float halfWidth;
+    public Vector3 origin, forward;
+    public float radius, halfAngleDeg, length, halfWidth;
     public int tier;
+    public PastaType pasta;
+    public bool radialLaunch;
 }
 
-/// <summary>
-/// パスタ折りの衝撃波。範囲内のイタリアンを撃破し、拡がるリング/前方ビームを描く。
-/// </summary>
+/// <summary>Hit detection and visible wave share the same circle, sector or line specification.</summary>
 public class Shockwave : MonoBehaviour
 {
     [SerializeField] private float duration = 0.4f;
-
-    private Transform ring, beam;
-    private Renderer activeRend;
-    private MaterialPropertyBlock mpb;
+    private BlastSpec spec;
+    private LineRenderer outer, inner;
+    private float elapsed;
     private Color color;
-    private float t;
-    private BlastKind kind;
-    private float targetDiameter, targetLength, beamWidth;
-    private float ringBias; // 狙い撃ちの扇はリングを前方へ寄せて方向を示す
-    private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
-    private static readonly int ColorId = Shader.PropertyToID("_Color");
+    private static Material lineMaterial;
+    private readonly Vector3[] points = new Vector3[81];
 
-    /// <summary>範囲内の敵にダメージ（damage=tier）。撃破数を返す。エフェクトも出す。</summary>
-    public static int Blast(BlastSpec s, Shockwave prefab)
+    public static bool Contains(BlastSpec blast, Vector3 position)
+    {
+        Vector3 d = position - blast.origin;
+        d.y = 0f;
+        Vector3 forward = blast.forward;
+        forward.y = 0f;
+        forward = forward.sqrMagnitude < 0.0001f ? Vector3.forward : forward.normalized;
+        if (blast.kind == BlastKind.Cone)
+            return d.sqrMagnitude <= blast.radius * blast.radius
+                && (blast.halfAngleDeg >= 180f || d.sqrMagnitude < 0.0001f
+                    || Vector3.Angle(forward, d) <= blast.halfAngleDeg);
+        float projection = Vector3.Dot(d, forward);
+        return projection >= -0.5f && projection <= blast.length
+            && (d - forward * projection).sqrMagnitude <= blast.halfWidth * blast.halfWidth;
+    }
+
+    public static int CountTargets(BlastSpec blast)
+    {
+        int count = 0;
+        foreach (var enemy in Enemy.Alive)
+            if (enemy != null && Contains(blast, enemy.transform.position)) count++;
+        return count;
+    }
+
+    public static int Blast(BlastSpec blast, Shockwave prefab)
     {
         int kills = 0;
-        var snapshot = Enemy.Alive.ToArray();
-        foreach (var e in snapshot)
-        {
-            if (e == null) continue;
-            Vector3 d = e.transform.position - s.origin; d.y = 0f;
-            bool hit = false;
-
-            if (s.kind == BlastKind.Cone)
-            {
-                if (d.magnitude <= s.radius)
-                    hit = s.halfAngleDeg >= 180f || d.sqrMagnitude < 0.0001f
-                        || Vector3.Angle(s.forward, d) <= s.halfAngleDeg;
-            }
-            else // Line（貫通）
-            {
-                float proj = Vector3.Dot(d, s.forward);
-                if (proj >= -0.5f && proj <= s.length)
-                    hit = (d - s.forward * proj).magnitude <= s.halfWidth;
-            }
-
-            if (hit && e.Hit(s.tier, s.tier, s.origin)) kills++;
-        }
-
-        if (prefab != null)
-        {
-            var w = Instantiate(prefab, s.origin + Vector3.up * 0.15f, Quaternion.LookRotation(s.forward));
-            w.Play(s);
-        }
+        var shot = new DominoShot(blast.tier, blast.pasta);
+        foreach (var enemy in Enemy.Alive.ToArray())
+            if (enemy != null && Contains(blast, enemy.transform.position)
+                && enemy.Launch(shot, blast.radialLaunch ? enemy.transform.position - blast.origin : blast.forward)) kills++;
+        var wave = prefab != null ? Instantiate(prefab) : new GameObject("Snap wave").AddComponent<Shockwave>();
+        wave.Play(blast);
         return kills;
     }
 
-    public void Play(BlastSpec s)
+    public void Play(BlastSpec blast)
     {
-        kind = s.kind;
-        color = s.tier == 3 ? new Color(1f, 0.25f, 0.1f)
-              : s.tier == 2 ? new Color(1f, 0.55f, 0.12f)
-              : new Color(1f, 0.85f, 0.3f);
-        ring = transform.Find("Ring");
-        beam = transform.Find("Beam");
-        mpb = new MaterialPropertyBlock();
+        spec = blast;
+        transform.SetPositionAndRotation(blast.origin + Vector3.up * 0.12f, Quaternion.LookRotation(blast.forward));
+        foreach (Transform child in transform) child.gameObject.SetActive(false);
+        color = blast.tier == 3 ? new Color(1f, 0.87f, 0.4f)
+              : blast.tier == 2 ? new Color(0.75f, 1f, 0.72f) : new Color(1f, 0.63f, 0.34f);
+        if (lineMaterial == null) lineMaterial = new Material(Resources.Load<Shader>("SnapWave"));
+        outer = MakeLine("Leading crack", 0.12f);
+        inner = MakeLine("Trailing crack", 0.04f);
+        Draw(outer, 0.05f); Draw(inner, 0.03f);
+    }
 
-        if (kind == BlastKind.Cone)
+    private LineRenderer MakeLine(string name, float width)
+    {
+        var line = new GameObject(name).AddComponent<LineRenderer>();
+        line.transform.SetParent(transform, false);
+        line.useWorldSpace = false;
+        line.sharedMaterial = lineMaterial;
+        line.widthMultiplier = width * (spec.tier == 3 ? 1.6f : 1f);
+        line.numCornerVertices = 2;
+        line.startColor = line.endColor = color;
+        return line;
+    }
+
+    private void Draw(LineRenderer line, float fraction)
+    {
+        if (spec.kind == BlastKind.Line)
         {
-            if (beam != null) beam.gameObject.SetActive(false);
-            if (ring != null) { ring.gameObject.SetActive(true); activeRend = ring.GetComponent<Renderer>(); }
-            targetDiameter = s.radius * 2f;
-            ringBias = s.halfAngleDeg < 180f ? 0.3f : 0f; // localスケールに対する比率（前方寄せ）
-            transform.localScale = new Vector3(0.1f, 0.03f, 0.1f);
+            float width = spec.halfWidth;
+            float length = spec.length * fraction;
+            line.positionCount = 5;
+            line.SetPosition(0, new Vector3(-width, 0, 0));
+            line.SetPosition(1, new Vector3(-width, 0, length));
+            line.SetPosition(2, new Vector3(width, 0, length));
+            line.SetPosition(3, new Vector3(width, 0, 0));
+            line.SetPosition(4, new Vector3(-width, 0, 0));
         }
         else
         {
-            if (ring != null) ring.gameObject.SetActive(false);
-            if (beam != null) { beam.gameObject.SetActive(true); activeRend = beam.GetComponent<Renderer>(); }
-            targetLength = s.length;
-            beamWidth = s.halfWidth * 2f;
+            bool circle = spec.halfAngleDeg >= 180f;
+            int count = circle ? 79 : 81;
+            int offset = circle ? 0 : 1;
+            if (!circle) points[0] = Vector3.zero;
+            for (int i = 0; i < 79; i++)
+            {
+                float angle = Mathf.Lerp(-spec.halfAngleDeg, spec.halfAngleDeg, i / 78f) * Mathf.Deg2Rad;
+                points[i + offset] = new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle)) * (spec.radius * fraction);
+            }
+            if (!circle) points[80] = Vector3.zero;
+            line.positionCount = count;
+            for (int i = 0; i < count; i++) line.SetPosition(i, points[i]);
         }
     }
 
     private void Update()
     {
-        t += Time.deltaTime / duration;
-        float e = Mathf.Clamp01(t);
-
-        if (kind == BlastKind.Cone)
-        {
-            float dia = Mathf.SmoothStep(0.1f, targetDiameter, e);
-            transform.localScale = new Vector3(dia, 0.03f, dia);
-            if (ring != null) ring.localPosition = new Vector3(0f, 0f, ringBias); // 前方バイアス（local比率なので定数）
-        }
-        else if (beam != null)
-        {
-            float len = Mathf.SmoothStep(0.1f, targetLength, e);
-            beam.localPosition = new Vector3(0f, 0f, len * 0.5f);
-            beam.localScale = new Vector3(beamWidth, 0.06f, len);
-        }
-
-        if (activeRend != null)
-        {
-            Color c = color; c.a = (1f - e) * 0.6f;
-            activeRend.GetPropertyBlock(mpb);
-            mpb.SetColor(BaseColorId, c);
-            mpb.SetColor(ColorId, c);
-            activeRend.SetPropertyBlock(mpb);
-        }
-
+        if (outer == null) return;
+        elapsed += Time.deltaTime;
+        float t = Mathf.Clamp01(elapsed / duration);
+        float progress = 1f - Mathf.Pow(1f - t, 3f);
+        Draw(outer, progress);
+        Draw(inner, progress * 0.88f);
+        outer.widthMultiplier = (1f - t) * (spec.tier == 3 ? 0.2f : 0.12f);
+        inner.widthMultiplier = (1f - t) * 0.055f;
         if (t >= 1f) Destroy(gameObject);
     }
 }
