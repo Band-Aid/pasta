@@ -12,6 +12,7 @@ public class ScoreManager : MonoBehaviour
     public int PerfectStreak { get; private set; }
     public int BestStreak { get; private set; }
     public int DominoKills { get; private set; }
+    public int KitchenKills { get; private set; }
     public int BestDomino { get; private set; }
     public float ComboRemaining => Mathf.Clamp01((comboUntil - Time.time) / 4.5f);
     public string Feedback { get; private set; }
@@ -77,6 +78,15 @@ public class ScoreManager : MonoBehaviour
 
     public void Announce(string message) => Show(message, new Color(0.65f, 1f, 0.85f));
 
+    // Automatic attacks score independently and never reset the manual snap's timing streak.
+    public void OnKitchenKills(int count)
+    {
+        if (count <= 0) return;
+        Kills += count;
+        KitchenKills += count;
+        Score += count * 120;
+    }
+
     public void ClearInputHint()
     {
         if (inputHint) feedbackUntil = 0f;
@@ -112,6 +122,7 @@ public class ScoreManager : MonoBehaviour
     {
         Score = Kills = BestCombo = BestStreak = 0;
         DominoKills = BestDomino = 0;
+        KitchenKills = 0;
         BreakCombo();
         Feedback = "";
         feedbackUntil = 0f;

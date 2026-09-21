@@ -27,7 +27,12 @@ public class GameManager : MonoBehaviour
     }
 
     private float hitStopUntil;
-    private void Awake() { Instance = this; Time.timeScale = 1f; }
+    private void Awake()
+    {
+        Instance = this;
+        Time.timeScale = 1f;
+        if (GetComponent<PastaKitchen>() == null) gameObject.AddComponent<PastaKitchen>();
+    }
 
     public void HitStop(float duration)
     {
@@ -71,6 +76,7 @@ public class GameManager : MonoBehaviour
         ScoreManager.Instance?.ResetScore();
         PlayerController.Instance?.ResetPlayer();
         PastaHand.Instance?.ResetHand();
+        PastaKitchen.Instance?.ResetRun();
 
         Current = State.Playing;
         EnemySpawner.Instance?.Begin();

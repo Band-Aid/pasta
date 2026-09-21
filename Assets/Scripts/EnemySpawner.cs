@@ -1,18 +1,19 @@
 using System.Collections;
 using UnityEngine;
 
-/// <summary>Three authored formations: learn to launch, pierce a guard, then fight on two fronts.</summary>
+/// <summary>Six rounds, from the first domino line to a kitchen-powered fight on four fronts.</summary>
 public class EnemySpawner : MonoBehaviour
 {
     public static EnemySpawner Instance { get; private set; }
-    public const int TotalRounds = 3;
+    public const int TotalRounds = 6;
     [SerializeField] private Enemy enemyPrefab;
     // Kept for existing scene and builder references.
     [SerializeField] private Transform[] spawnPoints;
     public int Wave { get; private set; }
     public bool Intermission { get; private set; }
     public int RemainingToSpawn { get; private set; }
-    public string RoundName => Wave == 1 ? "列の手前を狙え" : Wave == 2 ? "重い敵には、人をぶつけろ" : "挑発で集めて、一網打尽";
+    public string RoundName => Wave <= 1 ? "折って倒して、ドロップを拾おう" : Wave == 2 ? "素材を集めて、レシピを作ろう"
+        : Wave == 3 ? "パスタを育てて、二方向からの敵を撃退" : Wave == 6 ? "フルコース！ 四方向からの大群" : "自動パスタとコンボで生き残れ";
     private bool running;
 
     private void Awake() => Instance = this;
@@ -39,7 +40,7 @@ public class EnemySpawner : MonoBehaviour
         while (running && Wave < TotalRounds)
         {
             Wave++;
-            int count = Wave == 1 ? 9 : Wave == 2 ? 12 : 18;
+            int count = Wave == 1 ? 9 : Wave * 6;
             RemainingToSpawn = count;
             Intermission = false;
             // Face the first formation toward the player; later rounds use the open plaza streets.
@@ -65,7 +66,7 @@ public class EnemySpawner : MonoBehaviour
                 GameManager.Instance?.Win();
                 yield break;
             }
-            yield return new WaitForSeconds(2.4f);
+            yield return new WaitForSeconds(4f);
         }
     }
 
@@ -79,16 +80,16 @@ public class EnemySpawner : MonoBehaviour
     private void SpawnOne(Vector3 center, int index)
     {
         if (enemyPrefab == null) return;
-        int formationIndex = Wave == 3 ? index % 9 : index;
+        int formationIndex = Wave >= 3 ? index % 9 : index;
         int columns = Wave == 2 ? 4 : 3;
         int row = formationIndex / columns;
         int column = formationIndex % columns;
-        Vector3 direction = Wave == 3 && index >= 9 ? Vector3.right : Vector3.forward;
+        Vector3 direction = Wave >= 3 ? Quaternion.Euler(0f, index / 9 * 90f, 0f) * Vector3.forward : Vector3.forward;
         Vector3 side = Vector3.Cross(Vector3.up, direction);
         Vector3 pos = center + direction * (7.5f + row * 2.7f) + side * ((column - (columns - 1) * 0.5f) * 1.8f);
         var enemy = Instantiate(enemyPrefab, pos, Quaternion.LookRotation(-direction));
         EnemyType type = Wave >= 2 && row == 2 ? EnemyType.Tough
-            : Wave == 3 && row == 0 ? EnemyType.Fast : EnemyType.Normal;
-        enemy.Configure(type, Wave == 1 ? 1.3f : Wave == 2 ? 1.65f : 1.9f);
+            : Wave >= 3 && row == 0 ? EnemyType.Fast : EnemyType.Normal;
+        enemy.Configure(type, Wave == 1 ? 1.3f : Wave == 2 ? 1.65f : 1.9f + (Wave - 3) * 0.15f);
     }
 }

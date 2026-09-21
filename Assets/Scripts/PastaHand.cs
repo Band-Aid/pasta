@@ -140,7 +140,7 @@ public class PastaHand : MonoBehaviour
                 float a = i * Mathf.PI * 2f / 48;
                 rallyRing.SetPosition(i, rallyPoint + new Vector3(Mathf.Cos(a), 0.12f, Mathf.Sin(a)) * 1.3f);
             }
-        launchGuide.enabled = playing && Current != null && Type != PastaType.Lasagna;
+        launchGuide.enabled = playing && Charging && Current != null && Type != PastaType.Lasagna;
         if (!launchGuide.enabled) return;
         var spec = CreateBlast(3);
         Vector3 forward = spec.forward, side = Vector3.Cross(Vector3.up, forward);

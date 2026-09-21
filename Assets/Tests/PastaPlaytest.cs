@@ -67,6 +67,8 @@ public class PastaPlaytest : MonoBehaviour
         var player = PlayerController.Instance;
         var score = ScoreManager.Instance;
         var spawner = EnemySpawner.Instance;
+        // Isolate the original manual-attack regression scenarios. KitchenPlaytest covers loot and auto attacks.
+        PastaKitchen.Instance.enabled = false;
         Check(gm != null && hand != null && player != null && score != null, "Scene services initialized");
         yield return new WaitForSeconds(0.9f);
         spawner.StopAll();
@@ -244,12 +246,13 @@ public class PastaPlaytest : MonoBehaviour
             float deadline = Time.realtimeSinceStartup + 10f;
             while ((spawner.Wave < round || spawner.RemainingToSpawn > 0) && Time.realtimeSinceStartup < deadline)
                 yield return Wait(0.1f);
-            Check(spawner.Wave == round && Enemy.Alive.Count == (round == 1 ? 9 : round == 2 ? 12 : 18), "Round " + round + " spawns its complete authored formation");
+            int[] formationSizes = { 9, 12, 18, 24, 30, 36 };
+            Check(spawner.Wave == round && Enemy.Alive.Count == formationSizes[round - 1], "Round " + round + " spawns its complete authored formation");
             int count = Shockwave.Blast(new BlastSpec { origin = Vector3.zero, forward = Vector3.forward, kind = BlastKind.Cone, radius = 100, halfAngleDeg = 180, tier = 3 }, null);
             score.OnBreak(count, 3, 1f);
             yield return Wait(4f);
         }
-        Check(gm.Current == GameManager.State.Won && Time.timeScale == 1f, "Completing all three rounds reaches victory");
+        Check(gm.Current == GameManager.State.Won && Time.timeScale == 1f, "Completing all six rounds reaches victory");
         float victoryHealth = player.Health;
         player.TakeDamage(999f);
         Check(player.Health == victoryHealth && !hand.TryLure() && !player.TryDash(Vector3.forward), "Victory rejects damage and active abilities");
@@ -281,7 +284,7 @@ public class PastaPlaytest : MonoBehaviour
     }
     private IEnumerator Watchdog()
     {
-        yield return Wait(90f);
+        yield return Wait(120f);
         if (!finished) { errors.Add("Playtest timed out"); Finish(); }
     }
     private void Finish()

@@ -3,11 +3,13 @@ using UnityEngine;
 /// <summary>Shared synthesis, independent of gameplay's random sequence.</summary>
 public static class PastaAudio
 {
-    private static AudioClip snap, creak, ready, impact;
+    private static AudioClip snap, creak, ready, impact, pickup, recipe;
     public static AudioClip Snap => snap != null ? snap : snap = Create("Dry bundle crack", 0.23f, 0);
     public static AudioClip Creak => creak != null ? creak : creak = Create("Pasta tension", 0.4f, 1);
     public static AudioClip Ready => ready != null ? ready : ready = Create("Release cue", 0.12f, 2);
     public static AudioClip Impact => impact != null ? impact : impact = Create("Snap impact", 0.3f, 3);
+    public static AudioClip Pickup => pickup != null ? pickup : pickup = Create("Ingredient collected", 0.32f, 4);
+    public static AudioClip Recipe => recipe != null ? recipe : recipe = Create("Recipe complete", 0.65f, 5);
 
     private static AudioClip Create(string name, float duration, int kind)
     {
@@ -38,6 +40,15 @@ public static class PastaAudio
             else if (kind == 2)
                 samples[i] = (Mathf.Sin(t * 2f * Mathf.PI * 1320f) + Mathf.Sin(t * 2f * Mathf.PI * 1980f) * 0.35f)
                     * Mathf.Exp(-t * 38f) * Mathf.Min(t * 800f, 1f) * 0.3f;
+            else if (kind >= 4)
+            {
+                float step = kind == 5 ? 0.13f : 0.085f;
+                int note = Mathf.Min((int)(t / step), kind == 5 ? 3 : 2);
+                float frequency = note == 0 ? 660f : note == 1 ? 880f : note == 2 ? 1100f : 1320f;
+                float local = t - note * step;
+                samples[i] = (Mathf.Sin(t * 2f * Mathf.PI * frequency) + Mathf.Sin(t * 4f * Mathf.PI * frequency) * 0.2f)
+                    * Mathf.Exp(-local * 18f) * Mathf.Min(local * 500f, 1f) * 0.38f;
+            }
             else
                 samples[i] = (Mathf.Sin(2f * Mathf.PI * (105f * t - 105f * t * t)) * 0.65f + noise * 0.12f)
                     * Mathf.Exp(-t * 20f) * Mathf.Min(t * 1000f, 1f);

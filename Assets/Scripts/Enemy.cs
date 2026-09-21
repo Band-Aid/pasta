@@ -49,6 +49,8 @@ public class Enemy : MonoBehaviour
     private Vector3 flightPosition, fullScale = Vector3.one;
     private float flightRemaining, flightElapsed;
     private float lureUntil;
+    private float slowUntil, slowFactor = 1f;
+    public bool IsSlowed => !dead && Time.time < slowUntil;
     private Vector3 lurePoint;
     private static Material trailMaterial;
     public bool IsFlying => dead && flightRemaining > 0f;
@@ -192,7 +194,7 @@ public class Enemy : MonoBehaviour
         {
             Vector3 move = to.normalized * (IsLured ? Mathf.Min(dist * 3f, moveSpeed * 2.5f) : moveSpeed)
                 + Separation() * (IsLured ? 0.35f : 2.2f);
-            Vector3 p = transform.position + move * Time.deltaTime;
+            Vector3 p = transform.position + move * (Time.deltaTime * (IsSlowed ? slowFactor : 1f));
             p.y = baseY + Mathf.Abs(Mathf.Sin(Time.time * (Type == EnemyType.Fast ? 12f : 8f) + bobSeed)) * 0.09f;
             transform.position = p;
         }
@@ -232,16 +234,16 @@ public class Enemy : MonoBehaviour
     }
 
     /// <summary>衝撃波の被弾。damage分HPを減らし、0以下で撃破。撃破したらtrueを返す。</summary>
-    public bool Hit(int damage, int tier, Vector3 blastOrigin)
+    public bool Hit(int damage, int tier, Vector3 blastOrigin, bool feedback = true)
     {
         if (dead) return false;
         hp -= Mathf.Max(1, damage);
         if (hp <= 0)
         {
-            Kill(tier, blastOrigin);
+            Kill(tier, blastOrigin, feedback);
             return true;
         }
-        Stagger(blastOrigin);
+        Stagger(blastOrigin, feedback);
         return false;
     }
 
@@ -255,7 +257,14 @@ public class Enemy : MonoBehaviour
         if (head != null) head.localPosition = headHome;
     }
 
-    public bool Launch(DominoShot domino, Vector3 direction, bool collision = false)
+    public void Slow(float factor, float duration)
+    {
+        if (dead) return;
+        slowFactor = IsSlowed ? Mathf.Min(slowFactor, Mathf.Clamp01(factor)) : Mathf.Clamp01(factor);
+        slowUntil = Mathf.Max(slowUntil, Time.time + duration);
+    }
+
+    public bool Launch(DominoShot domino, Vector3 direction, bool collision = false, bool feedback = true)
     {
         if (dead) return false;
         // Heavy enemies resist weak direct shots, but any flying enemy breaks their guard.
@@ -265,6 +274,7 @@ public class Enemy : MonoBehaviour
             if (hp > 0) { Stagger(transform.position - direction); return false; }
         }
         dead = true;
+        PastaKitchen.Instance?.OnEnemyDefeated(transform.position);
         shot = domino;
         Alive.Remove(this);
         StopAllCoroutines();
@@ -281,8 +291,8 @@ public class Enemy : MonoBehaviour
         flightPosition = transform.position;
         flightPosition.y = baseY;
         PopEyes(2.1f);
-        Scream(shot.Tier);
-        if (!collision) Shout(shot.Tier);
+        if (feedback) Scream(shot.Tier);
+        if (!collision && feedback) Shout(shot.Tier);
         if (trailMaterial == null) trailMaterial = new Material(Resources.Load<Shader>("SnapWave"));
         var trail = new GameObject("Domino trail").AddComponent<TrailRenderer>();
         trail.transform.SetParent(transform, false);
@@ -344,7 +354,7 @@ public class Enemy : MonoBehaviour
         }
     }
 
-    private void Stagger(Vector3 origin)
+    private void Stagger(Vector3 origin, bool feedback = true)
     {
         windupUntil = 0f;
         if (warning != null) warning.gameObject.SetActive(false);
@@ -354,17 +364,18 @@ public class Enemy : MonoBehaviour
         if (away.sqrMagnitude < 0.01f) away = -transform.forward;
         staggerVel = away.normalized * 3.5f;
         PopEyes(1.4f);
-        Scream(1);
+        if (feedback) Scream(1);
         CancelInvoke(nameof(ResetEyes));
         Invoke(nameof(ResetEyes), 0.3f);
     }
 
     private void ResetEyes() { if (!dead) PopEyes(1f); }
 
-    private void Kill(int tier, Vector3 blastOrigin)
+    private void Kill(int tier, Vector3 blastOrigin, bool feedback)
     {
         if (dead) return;
         dead = true;
+        PastaKitchen.Instance?.OnEnemyDefeated(transform.position);
         windupUntil = 0f;
         if (warning != null) warning.gameObject.SetActive(false);
         Alive.Remove(this);
@@ -383,10 +394,13 @@ public class Enemy : MonoBehaviour
         rb.angularVelocity = Random.onUnitSphere * (tier * 6f);
 
         PopEyes(1.5f + tier * 0.3f);
-        Scream(tier);
-        Shout(tier);
+        if (feedback)
+        {
+            Scream(tier);
+            Shout(tier);
+        }
 
-        StartCoroutine(Despawn(tier == 1 ? 2.5f : 3.5f));
+        StartCoroutine(Despawn(feedback ? (tier == 1 ? 2.5f : 3.5f) : 1.1f));
     }
 
     private IEnumerator Despawn(float delay)

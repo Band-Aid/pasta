@@ -8,6 +8,13 @@ public class Hud : MonoBehaviour
     [SerializeField] private Text healthText, scoreText, killsText, waveText, meterText, ammoText, centerText, crosshair;
     private Text subtitle, targets, feedback, combo, weaponHelp, behind, left, right, dashHelp;
     private Text[] weapons;
+    private Text[] autoWeapons;
+    private Text ingredients, recipe, recipeHelp, kitchenNotice;
+    private Image kitchenNoticePanel;
+    private Image rewardAccent;
+    private CanvasGroup rewardGroup;
+    private GameObject ultimatePanel;
+    private int kitchenRevision = -1;
     private Image marker, perfectZone, goodZone, chargeFill, damageFlash;
     private RectTransform gauge;
     private GameObject endPanel;
@@ -37,16 +44,13 @@ public class Hud : MonoBehaviour
     private void BuildHud()
     {
         Vector2 tl = new Vector2(0, 1), tr = Vector2.one, bc = new Vector2(0.5f, 0), tc = new Vector2(0.5f, 1);
-        Box("Identity panel", root, tl, new Vector2(24, -24), new Vector2(370, 108), ink);
-        Box("Green", root, tl, new Vector2(24, -24), new Vector2(123, 4), new Color(0.27f, 0.65f, 0.48f));
-        Box("White", root, tl, new Vector2(147, -24), new Vector2(124, 4), cream);
-        Box("Red", root, tl, new Vector2(271, -24), new Vector2(123, 4), coral);
-        Label("Title", root, "PASTA LA VISTA", 32, tl, new Vector2(44, -40), new Vector2(340, 42), gold, TextAnchor.MiddleLeft);
-        Label("Tagline", root, "折って、ぶつけて、大連鎖。", 19, tl, new Vector2(46, -88), new Vector2(330, 28), cream, TextAnchor.MiddleLeft);
-        scoreText = Label("Score", root, "000000", 48, tr, new Vector2(-30, -27), new Vector2(350, 62), cream, TextAnchor.MiddleRight);
-        killsText = Label("Kills", root, "", 20, tr, new Vector2(-34, -94), new Vector2(350, 30), gold, TextAnchor.MiddleRight);
-        waveText = Label("Wave", root, "", 28, tc, new Vector2(0, -32), new Vector2(450, 42), cream);
-        subtitle = Label("Wave subtitle", root, "", 18, tc, new Vector2(0, -80), new Vector2(600, 32), muted);
+        Box("Identity panel", root, tl, new Vector2(24, -24), new Vector2(290, 58), ink);
+        Label("Title", root, "PASTA LA VISTA", 26, tl, new Vector2(42, -32), new Vector2(265, 40), gold, TextAnchor.MiddleLeft);
+        scoreText = Label("Score", root, "000000", 36, tr, new Vector2(-30, -24), new Vector2(300, 52), cream, TextAnchor.MiddleRight);
+        killsText = Label("Kills", root, "", 18, tr, new Vector2(-34, -78), new Vector2(300, 28), gold, TextAnchor.MiddleRight);
+        waveText = Label("Wave", root, "", 24, tc, new Vector2(0, -28), new Vector2(420, 38), cream);
+        subtitle = Label("Wave subtitle", root, "", 17, tc, new Vector2(0, -68), new Vector2(500, 28), muted);
+        BuildKitchenHud();
 
         var hpPanel = Box("Health panel", root, Vector2.zero, new Vector2(24, 63), new Vector2(306, 98), ink);
         healthText = Label("Health", hpPanel.transform, "", 22, tl, new Vector2(20, -12), new Vector2(260, 32), cream, TextAnchor.MiddleLeft);
@@ -73,9 +77,9 @@ public class Hud : MonoBehaviour
         timingOutline.effectDistance = new Vector2(1.5f, -1.5f);
         targets = Label("Reach", root, "", 20, bc, new Vector2(0, 77), new Vector2(700, 30), cream);
         crosshair = Label("Reticle", root, "+", 28, Vector2.one * 0.5f, Vector2.zero, new Vector2(60, 60), cream);
-        feedback = Label("Snap feedback", root, "", 36, Vector2.one * 0.5f, new Vector2(0, 178), new Vector2(1100, 120), gold);
+        feedback = Label("Snap feedback", root, "", 23, Vector2.one * 0.5f, new Vector2(0, 178), new Vector2(800, 70), gold);
         feedback.gameObject.AddComponent<Outline>().effectColor = new Color(0.04f, 0.04f, 0.02f, 0.8f);
-        combo = Label("Chain", root, "", 26, tr, new Vector2(-34, -142), new Vector2(420, 45), gold, TextAnchor.MiddleRight);
+        combo = Label("Chain", root, "", 19, tr, new Vector2(-34, -113), new Vector2(320, 32), gold, TextAnchor.MiddleRight);
 
         behind = Label("Behind warning", root, "", 23, bc, new Vector2(0, 230), new Vector2(550, 40), coral);
         left = Label("Left warning", root, "", 23, new Vector2(0, 0.5f), new Vector2(30, 0), new Vector2(230, 60), coral, TextAnchor.MiddleLeft);
@@ -93,9 +97,73 @@ public class Hud : MonoBehaviour
         endPanel.SetActive(false);
     }
 
+    private void BuildKitchenHud()
+    {
+        Vector2 tl = new Vector2(0, 1), tc = new Vector2(0.5f, 1);
+        var panel = Box("Kitchen inventory", root, tl, new Vector2(24, -96), new Vector2(290, 184), ink);
+        autoWeapons = new Text[3];
+        for (int i = 0; i < autoWeapons.Length; i++)
+            autoWeapons[i] = Label("Auto weapon " + i, panel.transform, "", 18, tl, new Vector2(16, -85 - i * 29), new Vector2(258, 27), muted, TextAnchor.MiddleLeft);
+        ingredients = Label("Ingredients", panel.transform, "", 17, tl, new Vector2(16, -10), new Vector2(264, 30), cream, TextAnchor.MiddleLeft);
+        recipe = Label("Recipe progress", panel.transform, "", 16, tl, new Vector2(16, -43), new Vector2(264, 34), muted, TextAnchor.MiddleLeft);
+        ultimatePanel = Box("Ultimate ready", root, new Vector2(1, 0), new Vector2(-24, 237), new Vector2(300, 68), ink).gameObject;
+        recipeHelp = Label("Recipe help", ultimatePanel.transform, "", 19, Vector2.one * 0.5f, Vector2.zero, new Vector2(280, 62), gold);
+        kitchenNoticePanel = Box("Kitchen notice", root, tc, new Vector2(0, -126), new Vector2(620, 112), new Color(0.035f, 0.06f, 0.065f, 0.96f));
+        rewardAccent = Box("Reward accent", kitchenNoticePanel.transform, tl, Vector2.zero, new Vector2(620, 4), gold);
+        rewardGroup = kitchenNoticePanel.gameObject.AddComponent<CanvasGroup>();
+        kitchenNotice = Label("Kitchen notice text", kitchenNoticePanel.transform, "", 24, Vector2.one * 0.5f, Vector2.zero, new Vector2(588, 100), KitchenVisuals.Mint);
+    }
+
+    private void UpdateKitchen()
+    {
+        var kitchen = PastaKitchen.Instance;
+        if (kitchen == null) return;
+        var inventory = kitchen.Inventory;
+        if (kitchenRevision != inventory.Revision)
+        {
+            kitchenRevision = inventory.Revision;
+            bool anyWeapon = false;
+            for (int i = 0; i < 3; i++)
+            {
+                int level = inventory.Level((KitchenWeapon)i);
+                autoWeapons[i].text = level > 0 ? $"{KitchenInventory.WeaponName((KitchenWeapon)i)}   Lv.{level}" : "";
+                anyWeapon |= level > 0;
+                autoWeapons[i].color = level > 0 ? KitchenVisuals.Mint : muted;
+            }
+            if (!anyWeapon) autoWeapons[0].text = "光るパスタを拾って装備";
+            ingredients.text = IngredientTag(inventory, PastaIngredient.Macaroni) + "  "
+                + IngredientTag(inventory, PastaIngredient.Cheese) + "  " + IngredientTag(inventory, PastaIngredient.Ham);
+            recipe.text = inventory.HasBritishCarbonara ? $"BRITISH CARBONARA  Lv.{inventory.RecipeLevel}"
+                : inventory.HasMacAndCheese ? "MAC & CHEESE 完成！  あとはハム"
+                : $"MAC & CHEESE  {inventory.MacAndCheeseParts}/2";
+            recipe.color = inventory.HasBritishCarbonara ? KitchenVisuals.Pink : gold;
+        }
+        ultimatePanel.SetActive(inventory.HasBritishCarbonara);
+        recipeHelp.text = kitchen.BicycleCooldown > 0f ? $"BRITISH CARBONARA\nあと {kitchen.BicycleCooldown:0.0} 秒"
+            : "BRITISH CARBONARA\nF / Y   おばあちゃん発進！";
+        bool show = kitchen.NoticeRemaining > 0f && GameManager.Instance != null && GameManager.Instance.IsPlaying;
+        kitchenNoticePanel.gameObject.SetActive(show);
+        if (show)
+        {
+            kitchenNotice.text = kitchen.Notice;
+            kitchenNotice.color = kitchen.NoticeColor;
+            rewardAccent.color = kitchen.NoticeColor;
+            rewardGroup.alpha = Mathf.Min(1f, kitchen.NoticeAge * 8f, kitchen.NoticeRemaining * 5f);
+            float pop = 1f + Mathf.Sin(Mathf.Clamp01(kitchen.NoticeAge / 0.32f) * Mathf.PI) * 0.045f;
+            kitchenNoticePanel.transform.localScale = Vector3.one * pop;
+        }
+    }
+
+    private static string IngredientTag(KitchenInventory inventory, PastaIngredient ingredient)
+    {
+        bool found = inventory.Count(ingredient) > 0;
+        return $"<color={(found ? "#78FFBC" : "#ADB8AD")}>{(found ? "●" : "○")}{KitchenInventory.IngredientName(ingredient)}</color>";
+    }
+
     private void Update()
     {
         if (root == null) return;
+        UpdateKitchen();
         var player = PlayerController.Instance;
         var score = ScoreManager.Instance;
         var hand = PastaHand.Instance;
@@ -114,9 +182,10 @@ public class Hud : MonoBehaviour
         if (score != null)
         {
             scoreText.text = score.Score.ToString("D6");
-            killsText.text = $"{score.Kills} 人撃退   /   衝突で {score.DominoKills} 人";
-            combo.text = score.BestDomino > 0 ? $"BEST  {score.BestDomino} 人連鎖" : "敵を奥の敵にぶつけよう";
-            feedback.text = score.FeedbackRemaining > 0 ? score.Feedback : "";
+            killsText.text = $"{score.Kills} 人撃退";
+            combo.text = score.BestDomino > 1 ? $"BEST  {score.BestDomino} 人連鎖" : "";
+            bool collecting = PastaKitchen.Instance != null && PastaKitchen.Instance.NoticeRemaining > 0f;
+            feedback.text = !collecting && score.FeedbackRemaining > 0 ? score.Feedback : "";
             Color c = score.FeedbackColor; c.a = Mathf.Clamp01(score.FeedbackRemaining * 4f);
             feedback.color = c;
             feedback.transform.localScale = Vector3.one * (1f + Mathf.Max(0f, score.FeedbackRemaining - 0.8f) * 0.3f);
@@ -124,7 +193,7 @@ public class Hud : MonoBehaviour
         if (spawner != null)
         {
             waveText.text = $"ROUND {Mathf.Max(1, spawner.Wave)} / {EnemySpawner.TotalRounds}";
-            subtitle.text = spawner.Intermission ? "ラウンドクリア！" : $"{spawner.RoundName}  /  あと {Enemy.Alive.Count + spawner.RemainingToSpawn} 人";
+            subtitle.text = spawner.Intermission ? "ひと息。ドロップを拾おう" : $"あと {Enemy.Alive.Count + spawner.RemainingToSpawn} 人";
         }
         if (hand != null) UpdateHand(hand);
         UpdateThreats(player);
@@ -134,10 +203,10 @@ public class Hud : MonoBehaviour
         if (ended)
         {
             bool won = GameManager.Instance.Current == GameManager.State.Won;
-            centerText.text = $"{(won ? "BRAVISSIMO!  全ラウンド制覇" : "BASTA!  もう一度挑戦")}\n\nSCORE  {score?.Score ?? 0:N0}    /    {score?.Kills ?? 0} 人撃退\n最大 {score?.BestDomino ?? 0} 人連鎖    ・    衝突で {score?.DominoKills ?? 0} 人撃退\n\nR / クリック / A  もう一度";
+            centerText.text = $"{(won ? "BRAVISSIMO!  フルコース完成" : "BASTA!  もう一度挑戦")}\n\nSCORE  {score?.Score ?? 0:N0}    /    {score?.Kills ?? 0} 人撃退\n最大 {score?.BestDomino ?? 0} 人連鎖    ・    自動パスタで {score?.KitchenKills ?? 0} 人撃退\n\nR / クリック / A  もう一度";
         }
         else if (paused)
-            centerText.text = "ひと休み\n\n手前の敵を飛ばし、奥の敵にぶつけよう。\n右クリック / LB で集める。Shift / RB で回り込む。\n金色なら重い敵も一撃。3ラウンドでクリア！\n\nクリック / A  で再開";
+            centerText.text = "ひと休み\n\n長押し→金色で離す。追加パスタは自動攻撃。\n光るドロップは近づいて拾おう。\nマカロニ＋チーズ＋ハムで大技解禁。F / Y で発射！\n6ラウンドでクリア。\n\nクリック / A  で再開";
         crosshair.enabled = !ended && !paused;
     }
 
