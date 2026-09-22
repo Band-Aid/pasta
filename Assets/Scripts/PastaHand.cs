@@ -278,7 +278,7 @@ public class PastaHand : MonoBehaviour
                 spec.halfWidth = 0.65f;
                 break;
             case PastaType.Lasagna:
-                spec.radius = radius * 0.8f;
+                spec.radius = (tier == 3 ? 5.5f : tier == 2 ? 4f : 2.5f) * rhythm;
                 spec.halfAngleDeg = 180f;
                 spec.radialLaunch = true;
                 break;
@@ -290,7 +290,7 @@ public class PastaHand : MonoBehaviour
     }
 
     public static int Tier(float quality) => quality >= 0.9f ? 3 : quality >= 0.7f ? 2 : 1;
-    private float ReloadDelay() => Type == PastaType.Lasagna ? 0.85f : Type == PastaType.Penne ? 0.38f : 0.48f;
+    private float ReloadDelay() => Type == PastaType.Lasagna ? 1.4f : Type == PastaType.Penne ? 0.38f : 0.48f;
 
     private void HandleModeInput()
     {
