@@ -253,7 +253,6 @@ public class PastaHand : MonoBehaviour
         ScoreManager.Instance?.OnBreak(result.kills, tier, quality, 1f, closeCalls);
         Recoil = tier == 3 ? 1f : tier == 2 ? 0.7f : 0.45f;
         PlayerController.Instance?.OnSnap(tier, result.kills);
-        if (result.hits > 0) TimeManager.Instance?.RequestSlowMotion(1.5f);
         reloadUntil = Time.time + ReloadDelay() * (tier == 3 ? 0.72f : 1f);
         TargetsInReach = 0;
     }

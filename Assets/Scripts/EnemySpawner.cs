@@ -14,6 +14,7 @@ public class EnemySpawner : MonoBehaviour
     public int RemainingToSpawn { get; private set; }
     public string RoundName => Wave == 1 ? "列の手前を狙え" : Wave == 2 ? "重い敵には、人をぶつけろ" : "挑発で集めて、一網打尽";
     private bool running;
+    private bool roundSlowMotionTriggered;
 
     private void Awake() => Instance = this;
 
@@ -33,12 +34,21 @@ public class EnemySpawner : MonoBehaviour
         StopAllCoroutines();
     }
 
+    public void OnEnemyDefeated()
+    {
+        if (!running || Wave == 0 || Intermission || roundSlowMotionTriggered
+            || RemainingToSpawn > 0 || Enemy.Alive.Count > 0) return;
+        roundSlowMotionTriggered = true;
+        TimeManager.Instance?.RequestSlowMotion(1.5f);
+    }
+
     private IEnumerator Loop()
     {
         yield return new WaitForSeconds(0.75f);
         while (running && Wave < TotalRounds)
         {
             Wave++;
+            roundSlowMotionTriggered = false;
             int count = Wave == 1 ? 9 : Wave == 2 ? 12 : 18;
             RemainingToSpawn = count;
             Intermission = false;
