@@ -316,7 +316,8 @@ public class Enemy : MonoBehaviour
         foreach (var target in Alive.ToArray())
         {
             if (target == null || !DominoShot.SweptHit(from, to, target.transform.position, shot.Width)) continue;
-            Vector3 direction = flightDirection * 0.8f + (target.transform.position - from).normalized * 0.2f;
+            Vector3 toTarget = (target.transform.position - from).normalized;
+            Vector3 direction = flightDirection * 0.55f + toTarget * 0.25f + RandomSpray() * 0.2f;
             if (target.Launch(shot, direction, true))
             {
                 PlayerController.Instance?.OnDominoImpact();
@@ -342,6 +343,14 @@ public class Enemy : MonoBehaviour
             rb.angularVelocity = Random.onUnitSphere * 5f;
             StartCoroutine(Despawn(0.8f));
         }
+    }
+
+    private Vector3 RandomSpray()
+    {
+        float angle = Random.Range(-50f, 50f) * Mathf.Deg2Rad;
+        Vector3 perp = Vector3.Cross(flightDirection, Vector3.up).normalized;
+        if (perp.sqrMagnitude < 0.001f) perp = Vector3.right;
+        return (Quaternion.AngleAxis(angle * Mathf.Rad2Deg, Vector3.up) * flightDirection).normalized;
     }
 
     private void Stagger(Vector3 origin)
