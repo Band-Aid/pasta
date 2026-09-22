@@ -47,16 +47,20 @@ public class Shockwave : MonoBehaviour
         return count;
     }
 
-    public static int Blast(BlastSpec blast, Shockwave prefab)
+    public static (int kills, int hits) Blast(BlastSpec blast, Shockwave prefab)
     {
         int kills = 0;
+        int hits = 0;
         var shot = new DominoShot(blast.tier, blast.pasta);
         foreach (var enemy in Enemy.Alive.ToArray())
-            if (enemy != null && Contains(blast, enemy.transform.position)
-                && enemy.Launch(shot, blast.radialLaunch ? enemy.transform.position - blast.origin : blast.forward)) kills++;
+        {
+            if (enemy == null || !Contains(blast, enemy.transform.position)) continue;
+            hits++;
+            if (enemy.Launch(shot, blast.radialLaunch ? enemy.transform.position - blast.origin : blast.forward)) kills++;
+        }
         var wave = prefab != null ? Instantiate(prefab) : new GameObject("Snap wave").AddComponent<Shockwave>();
         wave.Play(blast);
-        return kills;
+        return (kills, hits);
     }
 
     public void Play(BlastSpec blast)

@@ -249,11 +249,11 @@ public class PastaHand : MonoBehaviour
         int closeCalls = 0;
         foreach (var enemy in Enemy.Alive)
             if (enemy != null && enemy.IsWindingUp && Shockwave.Contains(spec, enemy.transform.position)) closeCalls++;
-        int kills = Shockwave.Blast(spec, shockwavePrefab);
-        ScoreManager.Instance?.OnBreak(kills, tier, quality, 1f, closeCalls);
+        var result = Shockwave.Blast(spec, shockwavePrefab);
+        ScoreManager.Instance?.OnBreak(result.kills, tier, quality, 1f, closeCalls);
         Recoil = tier == 3 ? 1f : tier == 2 ? 0.7f : 0.45f;
-        PlayerController.Instance?.OnSnap(tier, kills);
-        if (tier == 3 && kills > 0) GameManager.Instance?.HitStop(0.075f);
+        PlayerController.Instance?.OnSnap(tier, result.kills);
+        if (result.hits > 0) TimeManager.Instance?.RequestSlowMotion(3f);
         reloadUntil = Time.time + ReloadDelay() * (tier == 3 ? 0.72f : 1f);
         TargetsInReach = 0;
     }
