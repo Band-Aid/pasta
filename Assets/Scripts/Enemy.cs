@@ -294,6 +294,7 @@ public class Enemy : MonoBehaviour
         trail.startColor = new Color(1f, 0.8f, 0.2f, 0.9f);
         trail.endColor = new Color(1f, 0.4f, 0.1f, 0f);
         shot.Register(collision);
+        EnemySpawner.Instance?.OnEnemyDefeated();
         return true;
     }
 
@@ -387,6 +388,7 @@ public class Enemy : MonoBehaviour
         Shout(tier);
 
         StartCoroutine(Despawn(tier == 1 ? 2.5f : 3.5f));
+        EnemySpawner.Instance?.OnEnemyDefeated();
     }
 
     private IEnumerator Despawn(float delay)

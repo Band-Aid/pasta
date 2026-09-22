@@ -67,7 +67,9 @@ public class PastaPlaytest : MonoBehaviour
         var player = PlayerController.Instance;
         var score = ScoreManager.Instance;
         var spawner = EnemySpawner.Instance;
-        Check(gm != null && hand != null && player != null && score != null, "Scene services initialized");
+        var time = TimeManager.Instance;
+        float normalFixedStep = Time.fixedDeltaTime;
+        Check(gm != null && hand != null && player != null && score != null && time != null, "Scene services initialized including TimeManager");
         yield return new WaitForSeconds(0.9f);
         spawner.StopAll();
         gm.SetPaused(false);
@@ -96,19 +98,39 @@ public class PastaPlaytest : MonoBehaviour
         // Freeze only for the capture to keep the screenshot inside the timing window.
         gm.HitStop(0.15f);
         yield return Capture("02-gold-bend");
-        Time.timeScale = 1f;
+        time.ResetTime();
         Trigger(0f);
         yield return Wait(0.13f);
         Check(score.Kills >= 3, "Gold release launches the front row");
         Check(score.PerfectStreak == 1 && score.Combo == 1, "Perfect hit starts streak and combo");
+        Check(!time.IsSlowMotionActive && Time.timeScale == 1f, "A snap with enemies remaining stays at normal speed");
         Check(FindObjectsByType<PastaFragment>().Length == 3, "Snap creates three physical, capped fragments");
         yield return Capture("03-snap");
         yield return Wait(0.25f);
         yield return Capture("03a-collision");
         yield return Wait(0.85f);
+        Check(!time.IsSlowMotionActive && Time.timeScale == 1f
+            && Mathf.Approximately(Time.fixedDeltaTime, normalFixedStep), "Defeats outside an active round do not trigger slow motion");
         Check(score.Kills == 9 && Enemy.Alive.Count == 0, "Flying front row reaches enemies outside the original blast");
         Check(score.DominoKills == 6 && score.BestDomino == 9, "One shared shot counts all six collisions exactly once");
         yield return Capture("03b-domino-chain");
+
+        time.RequestSlowMotion(0.5f);
+        yield return Wait(0.2f);
+        float previousScale = Time.timeScale;
+        time.RequestSlowMotion(0.5f);
+        Check(Time.timeScale == previousScale, "Repeated slow motion does not jump back to normal speed");
+        yield return Wait(0.45f);
+        Check(Mathf.Approximately(Time.timeScale, 0.05f), "Repeated requests extend the slow motion hold");
+        gm.HitStop(0.08f);
+        yield return Wait(0.12f);
+        Check(Mathf.Approximately(Time.timeScale, 0.05f), "Hit stop expiration preserves active slow motion");
+        yield return Wait(0.5f);
+        time.RequestSlowMotion(2f);
+        yield return Wait(0.2f);
+        time.enabled = false;
+        Check(Time.timeScale == 1f && Mathf.Approximately(Time.fixedDeltaTime, normalFixedStep), "Disabling TimeManager restores time and physics");
+        time.enabled = true;
 
         // Every weapon initializes and builds finite geometry with the same prefab-compatible path.
         hand.SetType(PastaType.Penne);
@@ -117,6 +139,7 @@ public class PastaPlaytest : MonoBehaviour
         ValidateMesh(hand.Current);
         yield return Capture("04-penne");
         Trigger(0f); yield return Wait(0.55f);
+        Check(!time.IsSlowMotionActive && Time.timeScale == 1f, "A missed snap does not trigger slow motion");
         hand.SetType(PastaType.Lasagna);
         yield return Wait(0.1f);
         Trigger(1f); yield return Wait(0.73f);
@@ -202,7 +225,7 @@ public class PastaPlaytest : MonoBehaviour
         Trigger(0f); yield return Wait(0.15f);
         Check(score.Score - beforeCounter >= 375 && score.Feedback.Contains("ギリギリ"), "Gold snap during windup awards counter bonus");
         Check(player.Health == counterHealth, "Counter prevents pending damage");
-        yield return Wait(4.7f);
+        yield return new WaitForSeconds(4.7f);
         Check(score.Combo == 0 && score.PerfectStreak == 0, "Inactive chain and perfect streak expire");
 
         ClearEnemies(); yield return null;
@@ -221,37 +244,92 @@ public class PastaPlaytest : MonoBehaviour
         yield return Wait(0.5f);
         Check(!Enemy.Alive.Contains(guard) && score.DominoKills == beforeDomino + 1, "Collision defeats a heavy guard even after a weak launch");
 
+        time.RequestSlowMotion(3f);
+        yield return Wait(0.2f);
         player.TakeDamage(999f);
         yield return null;
         Check(gm.Current == GameManager.State.GameOver && Time.timeScale == 1f, "Death restores normal time and ends play");
         Vector3 stopped = player.transform.position;
         InputSystem.QueueStateEvent(pad, new GamepadState { leftStick = Vector2.up });
         yield return Wait(0.2f);
+        time.RequestSlowMotion(3f);
+        Check(!time.IsSlowMotionActive && Time.timeScale == 1f
+            && Mathf.Approximately(Time.fixedDeltaTime, normalFixedStep), "Death cancels slow motion and rejects new requests");
         Check(Vector3.Distance(stopped, player.transform.position) < 0.01f, "Cannot move after game over");
         yield return Capture("06-game-over");
         InputSystem.QueueStateEvent(pad, new GamepadState().WithButton(GamepadButton.South));
         yield return Wait(0.2f);
         Check(gm.IsPlaying && score.Kills == 0 && player.Health == player.MaxHealth, "Gamepad retry resets run");
+        Check(!time.IsSlowMotionActive && Time.timeScale == 1f, "Retry starts at normal speed");
         Check(hand.Type == PastaType.Spaghetti && !hand.Charging, "Retry restores hand without accidental shot");
         Check(Enemy.Alive.Count == 0 && FindObjectsByType<PastaFragment>().Length == 0, "Retry clears enemies and fragments");
         InputSystem.QueueStateEvent(pad, new GamepadState());
         yield return Wait(0.15f);
         Check(hand.LureCooldown == 0f && player.DashCooldown == 0f && score.DominoKills == 0, "Retry resets both abilities and domino score");
 
-        // Clear authored formations to exercise all transitions and the actual victory path.
+        // Emptying the field while the round is still spawning is not a round-ending defeat.
+        float spawnDeadline = Time.realtimeSinceStartup + 3f;
+        while (spawner.Wave == 0 && Time.realtimeSinceStartup < spawnDeadline) yield return null;
+        int defeatedDuringSpawn = Enemy.Alive.Count;
+        foreach (var enemy in Enemy.Alive.ToArray()) enemy.Hit(99, 3, Vector3.zero);
+        Check(spawner.RemainingToSpawn > 0 && Enemy.Alive.Count == 0 && !time.IsSlowMotionActive,
+            "Defeating all visible enemies during spawning does not trigger slow motion");
+
+        // Exercise round-ending direct hits, domino collisions, and the legacy damage path.
         for (int round = 1; round <= EnemySpawner.TotalRounds; round++)
         {
             float deadline = Time.realtimeSinceStartup + 10f;
             while ((spawner.Wave < round || spawner.RemainingToSpawn > 0) && Time.realtimeSinceStartup < deadline)
                 yield return Wait(0.1f);
-            Check(spawner.Wave == round && Enemy.Alive.Count == (round == 1 ? 9 : round == 2 ? 12 : 18), "Round " + round + " spawns its complete authored formation");
-            int count = Shockwave.Blast(new BlastSpec { origin = Vector3.zero, forward = Vector3.forward, kind = BlastKind.Cone, radius = 100, halfAngleDeg = 180, tier = 3 }, null);
-            score.OnBreak(count, 3, 1f);
-            yield return Wait(4f);
+            Check(spawner.Wave == round && Enemy.Alive.Count == (round == 1 ? 9 - defeatedDuringSpawn : round == 2 ? 12 : 18), "Round " + round + " spawns its complete authored formation");
+            var targets = Enemy.Alive.ToArray();
+            for (int i = 2; i < targets.Length; i++) targets[i].Hit(99, 3, Vector3.zero);
+            targets[0].Configure(EnemyType.Normal, 0f);
+            targets[1].Configure(EnemyType.Tough, 0f);
+            targets[0].transform.position = new Vector3(0, 0.05f, 4);
+            targets[1].transform.position = new Vector3(0, 0.05f, round == 2 ? 8 : 40);
+            var result = Shockwave.Blast(new BlastSpec { origin = Vector3.zero, forward = Vector3.forward, kind = BlastKind.Cone, radius = 5, halfAngleDeg = 32, tier = 1 }, null);
+            score.OnBreak(result.kills, 1, 1f);
+            Check(Enemy.Alive.Count == 1 && !time.IsSlowMotionActive && Time.timeScale == 1f,
+                "Round " + round + " stays at normal speed until the last enemy is defeated");
+            if (round == 2)
+            {
+                float collisionDeadline = Time.realtimeSinceStartup + 2f;
+                while (Enemy.Alive.Count > 0 && Time.realtimeSinceStartup < collisionDeadline) yield return null;
+            }
+            else if (round == 1)
+            {
+                // Hitting a surviving heavy enemy must not trigger the round-ending effect.
+                Shockwave.Blast(new BlastSpec { origin = Vector3.zero, forward = Vector3.forward, kind = BlastKind.Cone, radius = 100, halfAngleDeg = 180, tier = 1 }, null);
+                Check(Enemy.Alive.Count == 1 && !time.IsSlowMotionActive, "A nonlethal hit on the last enemy does not trigger slow motion");
+                result = Shockwave.Blast(new BlastSpec { origin = Vector3.zero, forward = Vector3.forward, kind = BlastKind.Cone, radius = 100, halfAngleDeg = 180, tier = 3 }, null);
+                score.OnBreak(result.kills, 3, 1f);
+            }
+            else targets[1].Hit(99, 3, Vector3.zero);
+
+            Check(Enemy.Alive.Count == 0 && time.IsSlowMotionActive,
+                "Round " + round + " final defeat starts slow motion (" + (round == 2 ? "domino" : round == 1 ? "direct blast" : "damage") + ")");
+            yield return Wait(0.2f);
+            Check(Mathf.Approximately(Time.timeScale, 0.05f), "Round " + round + " slow motion holds at five percent speed");
+            if (round == 1)
+            {
+                Check(Mathf.Abs(Time.fixedDeltaTime - normalFixedStep * 0.05f) < 0.000001f, "Physics timestep follows round-ending slow motion");
+                gm.SetPaused(true);
+                yield return Wait(0.4f);
+                time.RequestSlowMotion(0.1f);
+                Check(Time.timeScale == 0f, "Pause stays frozen during slow motion and ignores new requests");
+                gm.SetPaused(false);
+                Check(Mathf.Approximately(Time.timeScale, 0.05f), "Unpausing resumes the active slow motion");
+            }
+            yield return new WaitForSeconds(4f);
+            Check(!time.IsSlowMotionActive && Time.timeScale == 1f
+                && Mathf.Approximately(Time.fixedDeltaTime, normalFixedStep), "Round " + round + " restores normal speed and physics timestep");
         }
         Check(gm.Current == GameManager.State.Won && Time.timeScale == 1f, "Completing all three rounds reaches victory");
         float victoryHealth = player.Health;
         player.TakeDamage(999f);
+        time.RequestSlowMotion(3f);
+        Check(!time.IsSlowMotionActive && Time.timeScale == 1f, "Victory rejects slow motion requests");
         Check(player.Health == victoryHealth && !hand.TryLure() && !player.TryDash(Vector3.forward), "Victory rejects damage and active abilities");
         yield return Capture("08-victory");
         InputSystem.QueueStateEvent(pad, new GamepadState());
@@ -260,6 +338,12 @@ public class PastaPlaytest : MonoBehaviour
         yield return Wait(0.2f);
         Check(gm.IsPlaying && spawner.Wave == 0 && score.Score == 0,
             $"Victory can restart a clean run (state={gm.Current}, paused={gm.IsPaused}, round={spawner.Wave}, score={score.Score}, pad={pad.enabled})");
+        time.RequestSlowMotion(3f);
+        yield return Wait(0.2f);
+        gm.Win();
+        yield return Wait(0.2f);
+        Check(!time.IsSlowMotionActive && Time.timeScale == 1f
+            && Mathf.Approximately(Time.fixedDeltaTime, normalFixedStep), "Victory cancels active slow motion and restores physics");
         Finish();
     }
 
