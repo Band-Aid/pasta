@@ -290,7 +290,7 @@ public class PastaHand : MonoBehaviour
     }
 
     public static int Tier(float quality) => quality >= 0.9f ? 3 : quality >= 0.7f ? 2 : 1;
-    private float ReloadDelay() => Type == PastaType.Lasagna ? 1.4f : Type == PastaType.Penne ? 0.38f : 0.48f;
+    private float ReloadDelay() => Type == PastaType.Lasagna ? 1.7f : Type == PastaType.Penne ? 0.38f : 0.48f;
 
     private void HandleModeInput()
     {
