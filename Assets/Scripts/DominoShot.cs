@@ -17,20 +17,18 @@ public sealed class DominoShot
         Tier = tier;
         Type = type;
         Speed = type == PastaType.Penne ? 24f : 18f;
+        KnockbackMultiplier = KnockbackFor(type);
         Width = type == PastaType.Lasagna ? 1.5f : 1.05f;
         switch (type)
         {
             case PastaType.Penne:
                 Travel = tier == 3 ? 18f : tier == 2 ? 13f : 8f;
-                KnockbackMultiplier = 0.9f;
                 break;
             case PastaType.Lasagna:
                 Travel = tier == 3 ? 13f : tier == 2 ? 9f : 6f;
-                KnockbackMultiplier = 1.3f;
                 break;
             default:
                 Travel = tier == 3 ? 15f : tier == 2 ? 11f : 7f;
-                KnockbackMultiplier = 1f;
                 break;
         }
     }
