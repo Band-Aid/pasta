@@ -25,6 +25,7 @@ public class Enemy : MonoBehaviour
     public Font shoutFont;
 
     public EnemyType Type { get; private set; }
+    private float KnockbackMultiplier => Type == EnemyType.Fast ? 1.4f : Type == EnemyType.Tough ? 0.4f : 1f;
 
     private int hp = 1;
     private Transform player;
@@ -232,16 +233,16 @@ public class Enemy : MonoBehaviour
     }
 
     /// <summary>衝撃波の被弾。damage分HPを減らし、0以下で撃破。撃破したらtrueを返す。</summary>
-    public bool Hit(int damage, int tier, Vector3 blastOrigin)
+    public bool Hit(int damage, int tier, Vector3 blastOrigin, PastaType pasta = PastaType.Spaghetti)
     {
         if (dead) return false;
         hp -= Mathf.Max(1, damage);
         if (hp <= 0)
         {
-            Kill(tier, blastOrigin);
+            Kill(tier, blastOrigin, pasta);
             return true;
         }
-        Stagger(blastOrigin);
+        Stagger(blastOrigin, pasta);
         return false;
     }
 
@@ -259,10 +260,11 @@ public class Enemy : MonoBehaviour
     {
         if (dead) return false;
         // Heavy enemies resist weak direct shots, but any flying enemy breaks their guard.
-        if (!collision && Type == EnemyType.Tough && domino.Tier < 3)
+        if (!collision && Type == EnemyType.Tough && domino.Tier < 3
+            && !(domino.Type == PastaType.Lasagna && domino.Tier >= 2))
         {
             hp -= domino.Tier;
-            if (hp > 0) { Stagger(transform.position - direction); return false; }
+            if (hp > 0) { Stagger(transform.position - direction, domino.Type); return false; }
         }
         dead = true;
         shot = domino;
@@ -276,7 +278,7 @@ public class Enemy : MonoBehaviour
         if (col != null) col.enabled = false;
         direction.y = 0f;
         flightDirection = direction.sqrMagnitude > 0.001f ? direction.normalized : Vector3.forward;
-        flightRemaining = shot.Travel;
+        flightRemaining = shot.Travel * shot.KnockbackMultiplier * KnockbackMultiplier;
         flightElapsed = 0f;
         flightPosition = transform.position;
         flightPosition.y = baseY;
@@ -353,7 +355,7 @@ public class Enemy : MonoBehaviour
         return (Quaternion.AngleAxis(angle * Mathf.Rad2Deg, Vector3.up) * flightDirection).normalized;
     }
 
-    private void Stagger(Vector3 origin)
+    private void Stagger(Vector3 origin, PastaType pasta)
     {
         windupUntil = 0f;
         if (warning != null) warning.gameObject.SetActive(false);
@@ -361,7 +363,7 @@ public class Enemy : MonoBehaviour
         staggerUntil = Time.time + 0.35f;
         Vector3 away = transform.position - origin; away.y = 0f;
         if (away.sqrMagnitude < 0.01f) away = -transform.forward;
-        staggerVel = away.normalized * 3.5f;
+        staggerVel = away.normalized * (3.5f * DominoShot.KnockbackFor(pasta) * KnockbackMultiplier);
         PopEyes(1.4f);
         Scream(1);
         CancelInvoke(nameof(ResetEyes));
@@ -370,7 +372,7 @@ public class Enemy : MonoBehaviour
 
     private void ResetEyes() { if (!dead) PopEyes(1f); }
 
-    private void Kill(int tier, Vector3 blastOrigin)
+    private void Kill(int tier, Vector3 blastOrigin, PastaType pasta)
     {
         if (dead) return;
         dead = true;
@@ -388,7 +390,7 @@ public class Enemy : MonoBehaviour
 
         float up = tier == 3 ? 9f : tier == 2 ? 6f : 3.5f;
         float back = tier == 3 ? 7f : tier == 2 ? 5f : 2.5f;
-        rb.linearVelocity = Vector3.up * up + away * back;
+        rb.linearVelocity = (Vector3.up * up + away * back) * (DominoShot.KnockbackFor(pasta) * KnockbackMultiplier);
         rb.angularVelocity = Random.onUnitSphere * (tier * 6f);
 
         PopEyes(1.5f + tier * 0.3f);

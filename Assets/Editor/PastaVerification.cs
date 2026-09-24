@@ -41,7 +41,15 @@ public static class PastaVerification
         Require(!DominoShot.SweptHit(Vector3.zero, Vector3.forward * 20f, Vector3.back * 2f, 1f), "Domino excludes target behind flight segment");
         Require(DominoShot.SweptHit(Vector3.one, Vector3.one, Vector3.one, 1f), "Stationary domino has finite point test");
         Require(DominoShot.SweptHit(new Vector3(5, 0, 3), new Vector3(15, 0, 3), new Vector3(10, 0, 4), 1f), "Translated sideways domino lane");
-        Debug.Log("PASTA_CHECKS_PASSED: 21 timing, blast and domino boundary checks");
+        var spaghetti = new DominoShot(3, PastaType.Spaghetti);
+        var penne = new DominoShot(3, PastaType.Penne);
+        var lasagna = new DominoShot(3, PastaType.Lasagna);
+        Require(Mathf.Approximately(spaghetti.Travel, 15f) && Mathf.Approximately(spaghetti.KnockbackMultiplier, 1f), "Spaghetti is the shot baseline");
+        Require(Mathf.Approximately(penne.Travel, 22.5f) && Mathf.Approximately(penne.KnockbackMultiplier, 0.9f) && Mathf.Approximately(penne.Speed, 24f), "Penne travels 1.5 times baseline");
+        Require(Mathf.Approximately(new DominoShot(1, PastaType.Penne).Travel, 10.5f)
+            && Mathf.Approximately(new DominoShot(2, PastaType.Penne).Travel, 16.5f), "Penne travel scales at lower tiers too");
+        Require(Mathf.Approximately(lasagna.Travel, 12.75f) && Mathf.Approximately(lasagna.KnockbackMultiplier, 1.3f), "Lasagna trades travel for impact");
+        Debug.Log("PASTA_CHECKS_PASSED: timing, blast, domino and weapon balance checks");
     }
 
     private static void Require(bool condition, string message)
