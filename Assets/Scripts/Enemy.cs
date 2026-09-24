@@ -25,6 +25,7 @@ public class Enemy : MonoBehaviour
     public Font shoutFont;
 
     public EnemyType Type { get; private set; }
+    private float KnockbackMultiplier => Type == EnemyType.Fast ? 1.4f : Type == EnemyType.Tough ? 0.4f : 1f;
 
     private int hp = 1;
     private Transform player;
@@ -258,8 +259,9 @@ public class Enemy : MonoBehaviour
     public bool Launch(DominoShot domino, Vector3 direction, bool collision = false)
     {
         if (dead) return false;
-        // Heavy enemies resist weak direct shots, but any flying enemy breaks their guard.
-        if (!collision && Type == EnemyType.Tough && domino.Tier < 3)
+        // Heavy enemies resist weak direct shots; tier-2 lasagna and collisions break their guard.
+        if (!collision && Type == EnemyType.Tough && domino.Tier < 3
+            && !(domino.Pasta == PastaType.Lasagna && domino.Tier >= 2))
         {
             hp -= domino.Tier;
             if (hp > 0) { Stagger(transform.position - direction); return false; }
@@ -276,7 +278,8 @@ public class Enemy : MonoBehaviour
         if (col != null) col.enabled = false;
         direction.y = 0f;
         flightDirection = direction.sqrMagnitude > 0.001f ? direction.normalized : Vector3.forward;
-        flightRemaining = shot.Travel;
+        // Kinematic flight ignores Rigidbody.mass, so both pasta force and enemy weight scale its range.
+        flightRemaining = shot.Travel * shot.KnockbackMultiplier * KnockbackMultiplier;
         flightElapsed = 0f;
         flightPosition = transform.position;
         flightPosition.y = baseY;
@@ -361,7 +364,7 @@ public class Enemy : MonoBehaviour
         staggerUntil = Time.time + 0.35f;
         Vector3 away = transform.position - origin; away.y = 0f;
         if (away.sqrMagnitude < 0.01f) away = -transform.forward;
-        staggerVel = away.normalized * 3.5f;
+        staggerVel = away.normalized * (3.5f * KnockbackMultiplier);
         PopEyes(1.4f);
         Scream(1);
         CancelInvoke(nameof(ResetEyes));
@@ -388,7 +391,7 @@ public class Enemy : MonoBehaviour
 
         float up = tier == 3 ? 9f : tier == 2 ? 6f : 3.5f;
         float back = tier == 3 ? 7f : tier == 2 ? 5f : 2.5f;
-        rb.linearVelocity = Vector3.up * up + away * back;
+        rb.linearVelocity = (Vector3.up * up + away * back) * KnockbackMultiplier;
         rb.angularVelocity = Random.onUnitSphere * (tier * 6f);
 
         PopEyes(1.5f + tier * 0.3f);

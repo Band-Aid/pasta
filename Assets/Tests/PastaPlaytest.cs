@@ -68,6 +68,7 @@ public class PastaPlaytest : MonoBehaviour
         var score = ScoreManager.Instance;
         var spawner = EnemySpawner.Instance;
         Check(gm != null && hand != null && player != null && score != null, "Scene services initialized");
+        CheckShotBalance();
         yield return new WaitForSeconds(0.9f);
         spawner.StopAll();
         gm.SetPaused(false);
@@ -221,6 +222,18 @@ public class PastaPlaytest : MonoBehaviour
         yield return Wait(0.5f);
         Check(!Enemy.Alive.Contains(guard) && score.DominoKills == beforeDomino + 1, "Collision defeats a heavy guard even after a weak launch");
 
+        ClearEnemies(); yield return null;
+        var penneGuard = Instantiate(prefab, new Vector3(10, 0.05f, 10), Quaternion.identity);
+        penneGuard.Configure(EnemyType.Tough, 0f);
+        var lasagnaGuard = Instantiate(prefab, new Vector3(12, 0.05f, 10), Quaternion.identity);
+        lasagnaGuard.Configure(EnemyType.Tough, 0f);
+        yield return null;
+        Check(!penneGuard.Launch(new DominoShot(2, PastaType.Penne), Vector3.forward)
+            && Enemy.Alive.Contains(penneGuard), "Tier-2 Penne cannot break a tough guard");
+        Check(lasagnaGuard.Launch(new DominoShot(2, PastaType.Lasagna), Vector3.forward)
+            && !Enemy.Alive.Contains(lasagnaGuard), "Tier-2 Lasagna breaks a tough guard");
+        ClearEnemies(); yield return null;
+
         player.TakeDamage(999f);
         yield return null;
         Check(gm.Current == GameManager.State.GameOver && Time.timeScale == 1f, "Death restores normal time and ends play");
@@ -245,8 +258,8 @@ public class PastaPlaytest : MonoBehaviour
             while ((spawner.Wave < round || spawner.RemainingToSpawn > 0) && Time.realtimeSinceStartup < deadline)
                 yield return Wait(0.1f);
             Check(spawner.Wave == round && Enemy.Alive.Count == (round == 1 ? 9 : round == 2 ? 12 : 18), "Round " + round + " spawns its complete authored formation");
-            int count = Shockwave.Blast(new BlastSpec { origin = Vector3.zero, forward = Vector3.forward, kind = BlastKind.Cone, radius = 100, halfAngleDeg = 180, tier = 3 }, null);
-            score.OnBreak(count, 3, 1f);
+            var blast = Shockwave.Blast(new BlastSpec { origin = Vector3.zero, forward = Vector3.forward, kind = BlastKind.Cone, radius = 100, halfAngleDeg = 180, tier = 3 }, null);
+            score.OnBreak(blast.kills, 3, 1f);
             yield return Wait(4f);
         }
         Check(gm.Current == GameManager.State.Won && Time.timeScale == 1f, "Completing all three rounds reaches victory");
@@ -261,6 +274,20 @@ public class PastaPlaytest : MonoBehaviour
         Check(gm.IsPlaying && spawner.Wave == 0 && score.Score == 0,
             $"Victory can restart a clean run (state={gm.Current}, paused={gm.IsPaused}, round={spawner.Wave}, score={score.Score}, pad={pad.enabled})");
         Finish();
+    }
+
+    private void CheckShotBalance()
+    {
+        PastaType[] types = { PastaType.Spaghetti, PastaType.Penne, PastaType.Lasagna };
+        float[,] travel = { { 7f, 11f, 15f }, { 8f, 13f, 18f }, { 6f, 9f, 13f } };
+        float[] force = { 1f, 0.9f, 1.3f };
+        for (int type = 0; type < types.Length; type++)
+            for (int tier = 1; tier <= 3; tier++)
+            {
+                var shot = new DominoShot(tier, types[type]);
+                Check(shot.Travel == travel[type, tier - 1] && shot.KnockbackMultiplier == force[type],
+                    $"{types[type]} tier {tier} uses approved travel and force");
+            }
     }
 
     private void ValidateMesh(SpaghettiBreaker pasta)
