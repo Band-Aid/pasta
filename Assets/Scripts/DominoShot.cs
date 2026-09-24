@@ -6,17 +6,25 @@ public sealed class DominoShot
     public int Hits { get; private set; }
     public int Collisions { get; private set; }
     public int Tier { get; }
+    public PastaType Type { get; }
     public float Speed { get; }
     public float Travel { get; }
+    public float KnockbackMultiplier { get; }
     public float Width { get; }
 
     public DominoShot(int tier, PastaType type)
     {
         Tier = tier;
+        Type = type;
         Speed = type == PastaType.Penne ? 24f : 18f;
-        Travel = tier == 3 ? 15f : tier == 2 ? 11f : 7f;
+        float baseTravel = tier == 3 ? 15f : tier == 2 ? 11f : 7f;
+        Travel = baseTravel * (type == PastaType.Penne ? 1.5f : type == PastaType.Lasagna ? 0.85f : 1f);
+        KnockbackMultiplier = KnockbackFor(type);
         Width = type == PastaType.Lasagna ? 1.5f : 1.05f;
     }
+
+    public static float KnockbackFor(PastaType type) =>
+        type == PastaType.Penne ? 0.9f : type == PastaType.Lasagna ? 1.3f : 1f;
 
     public void Register(bool collision)
     {

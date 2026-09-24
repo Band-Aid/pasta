@@ -77,11 +77,15 @@ public class PastaPlaytest : MonoBehaviour
         yield return null;
         for (int i = 0; i < 9; i++)
         {
-            var enemy = Instantiate(prefab, new Vector3((i % 3 - 1) * 1.8f, 0.05f, 4.5f + i / 3 * 3.5f), Quaternion.Euler(0, 180f, 0));
+            var enemy = Instantiate(prefab, new Vector3((i % 3 - 1) * 1.8f, 0.05f, 3.4f + i / 3 * 3.5f), Quaternion.Euler(0, 180f, 0));
             enemy.Configure(EnemyType.Normal, 0f);
         }
         yield return Wait(0.35f);
         yield return Capture("01-ready");
+        Check(Mathf.Abs(hand.CreateBlast(1).radius - 2.5f) < 0.01f
+            && Mathf.Abs(hand.CreateBlast(2).radius - 3.25f) < 0.01f
+            && Mathf.Abs(hand.CreateBlast(3).radius - 4f) < 0.01f,
+            "Spaghetti uses the reduced radius at every tier");
 
         // An early release neither fires nor consumes the held bundle.
         var held = hand.Current;
@@ -122,8 +126,24 @@ public class PastaPlaytest : MonoBehaviour
         Trigger(1f); yield return Wait(0.73f);
         ValidateMesh(hand.Current);
         yield return Capture("05-lasagna");
-        Trigger(0f); yield return Wait(1f);
+        Trigger(0f); yield return Wait(0.1f);
+        Check(hand.ReloadRemaining > 2.3f, "Lasagna gold snap keeps the full 2.5 second cooldown");
+        while (hand.ReloadRemaining > 0f) yield return Wait(0.1f);
         hand.SetType(PastaType.Spaghetti);
+
+        // Tier 2 Lasagna alone should break a fresh Tough guard.
+        var penneGuard = Instantiate(prefab, new Vector3(40, 0.05f, 40), Quaternion.identity);
+        penneGuard.Configure(EnemyType.Tough, 0f);
+        var lasagnaGuard = Instantiate(prefab, new Vector3(42, 0.05f, 40), Quaternion.identity);
+        lasagnaGuard.Configure(EnemyType.Tough, 0f);
+        yield return null;
+        Check(!penneGuard.Launch(new DominoShot(2, PastaType.Penne), Vector3.forward)
+            && Enemy.Alive.Contains(penneGuard), "Penne tier 2 is blocked by a fresh Tough guard");
+        Check(lasagnaGuard.Launch(new DominoShot(2, PastaType.Lasagna), Vector3.forward)
+            && !Enemy.Alive.Contains(lasagnaGuard), "Lasagna tier 2 breaks a fresh Tough guard");
+        Destroy(penneGuard.gameObject);
+        Destroy(lasagnaGuard.gameObject);
+        yield return null;
 
         Trigger(1f); yield return Wait(0.2f);
         int beforeSwitch = score.Score;

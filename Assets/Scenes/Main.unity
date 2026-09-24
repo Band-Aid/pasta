@@ -63101,9 +63101,9 @@ MonoBehaviour:
   shockwavePrefab: {fileID: 4489248226214490182, guid: 6f528d01d23ff3a41bcc709ec09f20a1, type: 3}
   maxBend: 150
   sweepRate: 115
-  radiusTier1: 4
-  radiusTier2: 7.5
-  radiusTier3: 12
+  spaghettiRadiusTier1: 2.5
+  spaghettiRadiusTier2: 5
+  spaghettiRadiusTier3: 8
 --- !u!114 &974590133
 MonoBehaviour:
   m_ObjectHideFlags: 0
