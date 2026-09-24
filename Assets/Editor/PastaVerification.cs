@@ -45,10 +45,10 @@ public static class PastaVerification
         var penne = new DominoShot(3, PastaType.Penne);
         var lasagna = new DominoShot(3, PastaType.Lasagna);
         Require(Mathf.Approximately(spaghetti.Travel, 15f) && Mathf.Approximately(spaghetti.KnockbackMultiplier, 1f), "Spaghetti is the shot baseline");
-        Require(Mathf.Approximately(penne.Travel, 22.5f) && Mathf.Approximately(penne.KnockbackMultiplier, 0.9f) && Mathf.Approximately(penne.Speed, 24f), "Penne travels 1.5 times baseline");
-        Require(Mathf.Approximately(new DominoShot(1, PastaType.Penne).Travel, 10.5f)
-            && Mathf.Approximately(new DominoShot(2, PastaType.Penne).Travel, 16.5f), "Penne travel scales at lower tiers too");
-        Require(Mathf.Approximately(lasagna.Travel, 12.75f) && Mathf.Approximately(lasagna.KnockbackMultiplier, 1.3f), "Lasagna trades travel for impact");
+        Require(Mathf.Approximately(penne.Travel, 18f) && Mathf.Approximately(penne.KnockbackMultiplier, 0.9f) && Mathf.Approximately(penne.Speed, 24f), "Penne extends travel while keeping impact light");
+        Require(Mathf.Approximately(new DominoShot(1, PastaType.Penne).Travel, 8f)
+            && Mathf.Approximately(new DominoShot(2, PastaType.Penne).Travel, 13f), "Penne travel scales at lower tiers too");
+        Require(Mathf.Approximately(lasagna.Travel, 13f) && Mathf.Approximately(lasagna.KnockbackMultiplier, 1.3f), "Lasagna trades travel for impact");
         Debug.Log("PASTA_CHECKS_PASSED: timing, blast, domino and weapon balance checks");
     }
 

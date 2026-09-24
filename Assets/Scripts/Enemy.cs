@@ -259,7 +259,7 @@ public class Enemy : MonoBehaviour
     public bool Launch(DominoShot domino, Vector3 direction, bool collision = false)
     {
         if (dead) return false;
-        // Heavy enemies resist weak direct shots, but any flying enemy breaks their guard.
+        // Heavy enemies resist weak direct shots; tier-2 lasagna and flying enemies break their guard.
         if (!collision && Type == EnemyType.Tough && domino.Tier < 3
             && !(domino.Type == PastaType.Lasagna && domino.Tier >= 2))
         {
@@ -278,6 +278,7 @@ public class Enemy : MonoBehaviour
         if (col != null) col.enabled = false;
         direction.y = 0f;
         flightDirection = direction.sqrMagnitude > 0.001f ? direction.normalized : Vector3.forward;
+        // Kinematic flight ignores Rigidbody.mass, so both pasta force and enemy weight scale its range.
         flightRemaining = shot.Travel * shot.KnockbackMultiplier * KnockbackMultiplier;
         flightElapsed = 0f;
         flightPosition = transform.position;
