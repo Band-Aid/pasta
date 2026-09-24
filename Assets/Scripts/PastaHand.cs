@@ -12,9 +12,9 @@ public class PastaHand : MonoBehaviour
     [SerializeField] private Shockwave shockwavePrefab;
     [SerializeField] private float maxBend = 150f;
     [SerializeField] private float sweepRate = 115f;
-    [SerializeField] private float radiusTier1 = 4f;
-    [SerializeField] private float radiusTier2 = 7.5f;
-    [SerializeField] private float radiusTier3 = 12f;
+    [SerializeField] private float spaghettiRadiusTier1 = 2.5f;
+    [SerializeField] private float spaghettiRadiusTier2 = 5f;
+    [SerializeField] private float spaghettiRadiusTier3 = 8f;
 
     public SpaghettiBreaker Current { get; private set; }
     public PastaType Type { get; private set; }
@@ -254,7 +254,7 @@ public class PastaHand : MonoBehaviour
         Recoil = tier == 3 ? 1f : tier == 2 ? 0.7f : 0.45f;
         PlayerController.Instance?.OnSnap(tier, result.kills);
         if (result.hits > 0) TimeManager.Instance?.RequestSlowMotion(1.5f);
-        reloadUntil = Time.time + ReloadDelay() * (tier == 3 ? 0.72f : 1f);
+        reloadUntil = Time.time + ReloadDelay() * (tier == 3 && Type != PastaType.Lasagna ? 0.72f : 1f);
         TargetsInReach = 0;
     }
 
@@ -269,7 +269,8 @@ public class PastaHand : MonoBehaviour
             kind = BlastKind.Cone, halfAngleDeg = 32f, pasta = Type
         };
         float rhythm = 1f + Mathf.Min(ScoreManager.Instance != null ? ScoreManager.Instance.PerfectStreak : 0, 4) * 0.05f;
-        float radius = (tier == 3 ? radiusTier3 * 0.5f : tier == 2 ? radiusTier2 * 0.65f : radiusTier1) * rhythm;
+        float spaghettiRadius = (tier == 3 ? spaghettiRadiusTier3 * 0.5f
+            : tier == 2 ? spaghettiRadiusTier2 * 0.65f : spaghettiRadiusTier1) * rhythm;
         switch (Type)
         {
             case PastaType.Penne:
@@ -283,14 +284,14 @@ public class PastaHand : MonoBehaviour
                 spec.radialLaunch = true;
                 break;
             default:
-                spec.radius = radius;
+                spec.radius = spaghettiRadius;
                 break;
         }
         return spec;
     }
 
     public static int Tier(float quality) => quality >= 0.9f ? 3 : quality >= 0.7f ? 2 : 1;
-    private float ReloadDelay() => Type == PastaType.Lasagna ? 1.4f : Type == PastaType.Penne ? 0.38f : 0.48f;
+    private float ReloadDelay() => Type == PastaType.Lasagna ? 2.5f : Type == PastaType.Penne ? 0.38f : 0.48f;
 
     private void HandleModeInput()
     {

@@ -6,16 +6,16 @@ public sealed class DominoShot
     public int Hits { get; private set; }
     public int Collisions { get; private set; }
     public int Tier { get; }
-    public PastaType Pasta { get; }
+    public PastaType Type { get; }
     public float Speed { get; }
     public float Travel { get; }
-    public float Width { get; }
     public float KnockbackMultiplier { get; }
+    public float Width { get; }
 
     public DominoShot(int tier, PastaType type)
     {
         Tier = tier;
-        Pasta = type;
+        Type = type;
         Speed = type == PastaType.Penne ? 24f : 18f;
         Width = type == PastaType.Lasagna ? 1.5f : 1.05f;
         switch (type)
@@ -34,6 +34,9 @@ public sealed class DominoShot
                 break;
         }
     }
+
+    public static float KnockbackFor(PastaType type) =>
+        type == PastaType.Penne ? 0.9f : type == PastaType.Lasagna ? 1.3f : 1f;
 
     public void Register(bool collision)
     {
