@@ -25,6 +25,17 @@ namespace PastaSurvivors
         private float mainT;
         private bool firstPerson;
 
+        // Special weapon slot, minimap and off-screen pointers.
+        private Image specialFrame, specialIcon, specialCd;
+        private Text specialName, specialKey;
+        private RectTransform minimap;
+        private RawImage minimapImage;
+        private Texture2D minimapTex;
+        private readonly List<Image> mapDots = new List<Image>();
+        private Image mapPlayer;
+        private class Pointer { public RectTransform rt; public Image arrow, icon; }
+        private readonly List<Pointer> pointers = new List<Pointer>();
+
         public void Build(Transform parent)
         {
             var canvas = UiKit.MakeCanvas("HUD", 10, parent);
@@ -57,7 +68,7 @@ namespace PastaSurvivors
             mainFrame = UiKit.Img(root, "MainFrame", new Vector2(0f, 1f), new Vector2(14, -36), new Vector2(60, 60), new Color(1f, 0.8f, 0.3f, 0.95f), UiKit.Round, new Vector2(0f, 1f));
             mainFrame.transform.SetSiblingIndex(0);
             mainTag = UiKit.Label(mainFrame.transform, "Tag", "主", 16, new Color(0.25f, 0.12f, 0.02f), TextAnchor.UpperLeft, new Vector2(0f, 1f), new Vector2(3, 1), new Vector2(30, 22), FontStyle.Bold, false, new Vector2(0f, 1f));
-            switchHint = UiKit.Label(root, "SwitchHint", "Q / E ・ホイール ・LB / RB で主武器切替", 17, new Color(1f, 1f, 1f, 0.6f), TextAnchor.UpperLeft, new Vector2(0f, 1f), new Vector2(20, -154), new Vector2(560, 26), FontStyle.Normal, true, new Vector2(0f, 1f));
+            switchHint = UiKit.Label(root, "SwitchHint", "Q/E・ホイール・LB/RB 主武器切替　V 視点　左クリック長押し 移動", 17, new Color(1f, 1f, 1f, 0.6f), TextAnchor.UpperLeft, new Vector2(0f, 1f), new Vector2(20, -154), new Vector2(560, 26), FontStyle.Normal, true, new Vector2(0f, 1f));
             mainText = UiKit.Label(root, "MainText", "", 24, UiKit.Gold, TextAnchor.UpperLeft, new Vector2(0f, 1f), new Vector2(20, -182), new Vector2(380, 120), FontStyle.Bold, true, new Vector2(0f, 1f));
 
             // First person: crosshair and a radar for Italians sneaking up from behind.
@@ -74,6 +85,46 @@ namespace PastaSurvivors
                 var d = UiKit.Img(radar, "Dot", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(7, 7), Color.white, UiKit.Pill);
                 d.enabled = false;
                 radarDots.Add(d);
+            }
+
+            // Special weapon slot (bottom-left): manual, with a cooldown dial.
+            specialFrame = UiKit.Img(root, "Special", new Vector2(0f, 0f), new Vector2(28, 30), new Vector2(124, 124), UiKit.Ink, UiKit.Round, new Vector2(0f, 0f));
+            specialIcon = UiKit.Img(specialFrame.transform, "Icon", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(92, 92), Color.white, UiKit.White);
+            specialCd = UiKit.Img(specialFrame.transform, "Cooldown", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(112, 112), new Color(0f, 0f, 0f, 0.65f), UiKit.Pill);
+            specialCd.type = Image.Type.Filled;
+            specialCd.fillMethod = Image.FillMethod.Radial360;
+            specialCd.fillOrigin = (int)Image.Origin360.Top;
+            specialCd.fillClockwise = false;
+            specialName = UiKit.Label(root, "SpecialName", "", 22, UiKit.Gold, TextAnchor.LowerLeft, new Vector2(0f, 0f), new Vector2(162, 94), new Vector2(520, 60), FontStyle.Bold, true, new Vector2(0f, 0f));
+            specialKey = UiKit.Label(root, "SpecialKey", "", 18, new Color(1f, 1f, 1f, 0.7f), TextAnchor.LowerLeft, new Vector2(0f, 0f), new Vector2(162, 34), new Vector2(520, 56), FontStyle.Normal, true, new Vector2(0f, 0f));
+
+            // Minimap (top-down): walls, water, areas, pedestals and points of interest.
+            minimap = UiKit.Rect(root, "Minimap", new Vector2(1f, 0f), new Vector2(-24, 30), new Vector2(300, 300), new Vector2(1f, 0f));
+            var mapBg = UiKit.Img(minimap, "Frame", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(308, 308), UiKit.Ink, UiKit.Round);
+            _ = mapBg;
+            var mapGo = new GameObject("Map", typeof(RectTransform));
+            var mapRt = (RectTransform)mapGo.transform;
+            mapRt.SetParent(minimap, false);
+            mapRt.anchorMin = mapRt.anchorMax = new Vector2(0.5f, 0.5f);
+            mapRt.sizeDelta = new Vector2(300, 300);
+            minimapImage = mapGo.AddComponent<RawImage>();
+            minimapImage.raycastTarget = false;
+            for (int i = 0; i < 40; i++)
+            {
+                var d = UiKit.Img(mapRt, "Dot", new Vector2(0f, 0f), Vector2.zero, new Vector2(8, 8), Color.white, UiKit.Pill, new Vector2(0.5f, 0.5f));
+                d.enabled = false;
+                mapDots.Add(d);
+            }
+            mapPlayer = UiKit.Img(mapRt, "Me", new Vector2(0f, 0f), Vector2.zero, new Vector2(14, 14), UiKit.Gold, UiKit.Pill, new Vector2(0.5f, 0.5f));
+
+            // Screen-edge pointers toward specials, chests and the boss.
+            for (int i = 0; i < 8; i++)
+            {
+                var rt = UiKit.Rect(root, "Pointer", new Vector2(0f, 0f), Vector2.zero, new Vector2(60, 60), new Vector2(0.5f, 0.5f));
+                var arrow = UiKit.Img(rt, "Arrow", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40, 40), Color.white, Icons.Get("arrow"));
+                var icon = UiKit.Img(rt, "Icon", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40, 40), Color.white, UiKit.White);
+                rt.gameObject.SetActive(false);
+                pointers.Add(new Pointer { rt = rt, arrow = arrow, icon = icon });
             }
 
             // HP bar that follows the player (Vampire Survivors style).
@@ -104,9 +155,52 @@ namespace PastaSurvivors
             SetFirstPerson(false);
         }
 
+        /// <summary>Paints the stage layout into the minimap texture.</summary>
+        public void BuildMinimap(Arena arena)
+        {
+            if (arena == null || arena.BlockedCells == null) return;
+            int w = arena.GridW, h = arena.GridH;
+            if (minimapTex != null) Destroy(minimapTex);
+            minimapTex = new Texture2D(w, h, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, name = "Minimap" };
+            var px = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int i = y * w + x;
+                    var c = arena.CellCenter(x, y);
+                    Color col = new Color(0.3f, 0.27f, 0.24f, 0.8f);
+                    foreach (var a in arena.areas)
+                        if (new Vector2(c.x - a.c.x, c.z - a.c.y).magnitude < a.r)
+                            col = a.kind == Arena.AreaKind.Heal ? new Color(0.25f, 0.55f, 0.3f, 0.9f) : new Color(0.55f, 0.4f, 0.2f, 0.85f);
+                    foreach (var r in arena.roads)
+                    {
+                        var d = r.b - r.a;
+                        float t = Mathf.Clamp01(Vector3.Dot(c - r.a, d) / d.sqrMagnitude);
+                        if ((r.a + d * t - c).magnitude < r.width * 0.5f) col = new Color(0.12f, 0.12f, 0.14f, 0.9f);
+                    }
+                    if (arena.WaterCells[i]) col = new Color(0.2f, 0.45f, 0.62f, 0.95f);
+                    else if (arena.BlockedCells[i]) col = new Color(0.72f, 0.66f, 0.58f, 0.95f);
+                    px[i] = col;
+                }
+            minimapTex.SetPixels32(px);
+            minimapTex.Apply();
+            minimapImage.texture = minimapTex;
+            float aspect = (float)h / w;
+            var size = w >= h ? new Vector2(300f, 300f * aspect) : new Vector2(300f / aspect, 300f);
+            minimapImage.rectTransform.sizeDelta = size;
+            ((RectTransform)minimap.GetChild(0)).sizeDelta = size + Vector2.one * 8f;
+        }
+
+        public void SpecialAcquired(SpecialId id)
+        {
+            var def = GameData.Special(id);
+            Banner("特殊武器を入手：" + def.name + "（右クリック / F / Y）", new Color(1f, 0.85f, 0.4f));
+        }
+
         public void SetFirstPerson(bool on)
         {
             firstPerson = on;
+            if (minimap != null) minimap.gameObject.SetActive(!on);
             crossRing.gameObject.SetActive(on);
             crossDot.gameObject.SetActive(on);
             radar.gameObject.SetActive(on);
@@ -162,6 +256,105 @@ namespace PastaSurvivors
             Floating.Clear();
         }
 
+        private void UpdateSpecial(Player p)
+        {
+            if (p.Special.HasValue)
+            {
+                var def = GameData.Special(p.Special.Value);
+                specialIcon.enabled = true;
+                specialIcon.sprite = Icons.Get(def.icon);
+                float remaining = Mathf.Clamp01(p.SpecialCd / p.SpecialCdMax);
+                specialCd.fillAmount = remaining;
+                specialFrame.color = remaining <= 0f ? new Color(0.45f, 0.3f, 0.05f, 0.95f) : UiKit.Ink;
+                specialName.text = def.name + (p.BuffTime > 0f ? $"  <color=#fff0a0>効果中 {p.BuffTime:0.0}</color>" : "");
+                specialKey.text = remaining <= 0f ? "右クリック / F / Y で使う" : $"再使用まで {p.SpecialCd:0.0} 秒";
+            }
+            else
+            {
+                specialIcon.enabled = false;
+                specialCd.fillAmount = 0f;
+                specialFrame.color = new Color(0.08f, 0.06f, 0.07f, 0.45f);
+                specialName.text = "特殊武器なし";
+                specialKey.text = "マップの光の柱（台座）で拾おう";
+            }
+        }
+
+        private Vector2 MapPos(Vector3 world)
+        {
+            var a = G.Arena;
+            var size = minimapImage.rectTransform.sizeDelta;
+            return new Vector2((world.x - a.min.x) / (a.max.x - a.min.x) * size.x, (world.z - a.min.y) / (a.max.y - a.min.y) * size.y);
+        }
+
+        private void UpdateMinimap(Player p)
+        {
+            if (G.Arena == null || minimapTex == null) return;
+            // Dots are children of the map image, whose pivot is the centre; offset by half the size.
+            var half = minimapImage.rectTransform.sizeDelta * 0.5f;
+            mapPlayer.rectTransform.anchoredPosition = MapPos(p.Position) - half;
+            int n = 0;
+            void Dot(Vector3 at, Color c, float size)
+            {
+                if (n >= mapDots.Count) return;
+                var d = mapDots[n++];
+                d.enabled = true;
+                d.color = c;
+                d.rectTransform.sizeDelta = new Vector2(size, size);
+                d.rectTransform.anchoredPosition = MapPos(at) - half;
+            }
+            float pulse = 10f + Mathf.Sin(Time.unscaledTime * 6f) * 3f;
+            foreach (var s in G.Arena.specialSpots) Dot(s, new Color(0.9f, 0.85f, 0.7f, 0.5f), 6f);
+            foreach (var pk in G.Pickups.Active)
+            {
+                if (pk.kind == PickupKind.Special) Dot(pk.pos, new Color(1f, 0.8f, 0.2f), pulse);
+                else if (pk.kind == PickupKind.Chest) Dot(pk.pos, new Color(1f, 0.95f, 0.4f), 10f);
+            }
+            foreach (var e in G.Enemies.Active)
+            {
+                if (!e.active || e.fleeing) continue;
+                if (e.IsBoss) Dot(e.pos, new Color(1f, 0.2f, 0.3f), 16f);
+                else if (e.IsElite) Dot(e.pos, new Color(0.4f, 1f, 0.4f), 10f);
+            }
+            for (int i = n; i < mapDots.Count; i++) { if (!mapDots[i].enabled) break; mapDots[i].enabled = false; }
+        }
+
+        private void UpdatePointers(Player p)
+        {
+            var cam = G.Cam != null ? G.Cam.Cam : null;
+            int n = 0;
+            void Point(Vector3 world, Sprite icon, Color color)
+            {
+                if (cam == null || n >= pointers.Count) return;
+                var sp = cam.WorldToScreenPoint(world + Vector3.up);
+                bool behind = sp.z < 0f;
+                if (behind) sp = new Vector3(Screen.width - sp.x, Screen.height - sp.y, 0f);
+                float margin = 70f * root.localScale.x;
+                bool onScreen = !behind && sp.x > margin && sp.x < Screen.width - margin && sp.y > margin && sp.y < Screen.height - margin;
+                if (onScreen) return;
+                var center = new Vector2(Screen.width, Screen.height) * 0.5f;
+                var dir = new Vector2(sp.x, sp.y) - center;
+                if (dir.sqrMagnitude < 1f) dir = Vector2.up;
+                float sx = (center.x - margin) / Mathf.Max(0.001f, Mathf.Abs(dir.x));
+                float sy = (center.y - margin) / Mathf.Max(0.001f, Mathf.Abs(dir.y));
+                var pos = center + dir * Mathf.Min(sx, sy);
+                var ptr = pointers[n++];
+                ptr.rt.gameObject.SetActive(true);
+                ptr.rt.position = pos;
+                ptr.arrow.rectTransform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg - 90f);
+                ptr.arrow.rectTransform.anchoredPosition = dir.normalized * 22f;
+                ptr.arrow.color = color;
+                ptr.icon.sprite = icon;
+            }
+            foreach (var pk in G.Pickups.Active)
+            {
+                if (pk.kind == PickupKind.Special) Point(pk.pos, Icons.Get(GameData.Special(pk.special).icon), UiKit.Gold);
+                else if (pk.kind == PickupKind.Chest) Point(pk.pos, Icons.Get("coin"), new Color(1f, 0.95f, 0.5f));
+            }
+            var boss = G.Enemies.Boss;
+            if (boss != null && boss.active && !boss.fleeing) Point(boss.pos, Icons.Get("heart"), new Color(1f, 0.3f, 0.3f));
+            for (int i = n; i < pointers.Count; i++) if (pointers[i].rt.gameObject.activeSelf) pointers[i].rt.gameObject.SetActive(false);
+        }
+
         private void UpdateRadar(Player p)
         {
             const float range = 28f, half = 110f;
@@ -184,14 +377,14 @@ namespace PastaSurvivors
             foreach (var pk in G.Pickups.Active)
             {
                 if (n >= radarDots.Count) break;
-                if (pk.kind != PickupKind.Chest && pk.kind != PickupKind.Pizza) continue;
+                if (pk.kind != PickupKind.Chest && pk.kind != PickupKind.Pizza && pk.kind != PickupKind.Special) continue;
                 var d = inv * (pk.pos - p.Position);
                 if (new Vector2(d.x, d.z).magnitude > range) continue;
                 var dot = radarDots[n++];
                 dot.enabled = true;
                 dot.rectTransform.anchoredPosition = new Vector2(d.x, d.z) / range * half;
-                dot.color = pk.kind == PickupKind.Chest ? UiKit.Gold : new Color(0.4f, 1f, 0.6f);
-                dot.rectTransform.sizeDelta = new Vector2(12f, 12f);
+                dot.color = pk.kind == PickupKind.Chest ? UiKit.Gold : pk.kind == PickupKind.Special ? new Color(1f, 0.6f, 0.1f) : new Color(0.4f, 1f, 0.6f);
+                dot.rectTransform.sizeDelta = pk.kind == PickupKind.Special ? new Vector2(16f, 16f) : new Vector2(12f, 12f);
             }
             for (int i = n; i < radarDots.Count; i++)
             {
@@ -266,7 +459,7 @@ namespace PastaSurvivors
             mainTag.enabled = mainFrame.enabled;
             if (mainFrame.enabled)
                 mainFrame.rectTransform.anchoredPosition = new Vector2(18 + mainIdx * 58 - 4, -36);
-            switchHint.enabled = p.Weapons.Count > 1;
+            switchHint.enabled = true;
             if (mainT > 0f)
             {
                 mainT -= dt;
@@ -274,6 +467,10 @@ namespace PastaSurvivors
             }
             else if (mainText.text.Length > 0) mainText.text = "";
             if (firstPerson) UpdateRadar(p);
+            else UpdateMinimap(p);
+            UpdateSpecial(p);
+            UpdatePointers(p);
+            if (G.Fx != null) G.Fx.Reticle(p.MouseGround, !firstPerson && p.MouseAiming && G.Playing);
 
             var cam = G.Cam != null ? G.Cam.Cam : null;
             if (cam != null)

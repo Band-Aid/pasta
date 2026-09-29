@@ -79,7 +79,7 @@ namespace PastaSurvivors
         public Vector3 SpawnPoint(Vector3 bias, float radius)
         {
             var pp = G.Player != null ? G.Player.Position : Vector3.zero;
-            for (int tries = 0; tries < 16; tries++)
+            for (int tries = 0; tries < 24; tries++)
             {
                 float angle = Random.value * 360f;
                 var dir = Quaternion.Euler(0f, angle, 0f) * Vector3.forward;
@@ -89,6 +89,7 @@ namespace PastaSurvivors
                 var p = pp + dir * dist;
                 if (!G.Arena.Inside(p, radius + 0.5f)) continue;
                 if (G.Arena.Blocked(p, radius)) continue;
+                if (!G.Arena.Reachable(p)) continue;
                 return p;
             }
             // Fallback: clamp into the arena along a random direction.
@@ -103,6 +104,7 @@ namespace PastaSurvivors
                 float a = i * Mathf.PI * 2f / count;
                 var p = center + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * radius;
                 if (!G.Arena.Inside(p, 0.6f)) p = G.Arena.Clamp(p, 0.8f);
+                if (G.Arena.Blocked(p, 0.5f) || !G.Arena.Reachable(p)) continue;
                 G.Enemies.Spawn(kind, p);
             }
         }
@@ -122,8 +124,9 @@ namespace PastaSurvivors
                         var center = pp + dir * 24f;
                         for (int i = 0; i < ev.count; i++)
                         {
-                            var p = center + side * Random.Range(-9f, 9f) + dir * Random.Range(-3f, 5f);
-                            G.Enemies.Spawn(ev.kind, G.Arena.Clamp(p, 1f));
+                            var p = G.Arena.Clamp(center + side * Random.Range(-9f, 9f) + dir * Random.Range(-3f, 5f), 1f);
+                            if (G.Arena.Blocked(p, 0.5f) || !G.Arena.Reachable(p)) p = SpawnPoint(Vector3.zero, 0.5f);
+                            G.Enemies.Spawn(ev.kind, p);
                         }
                         break;
                     }

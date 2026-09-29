@@ -14,6 +14,8 @@ namespace PastaSurvivors
         public Vector3 pos, facing = Vector3.back, knock;
         public float hp, maxHp, damage, speedMul = 1f, radius, scale;
         public float flash, stun, slow, buff;
+        /// <summary>Scared (Sta○ Beam): runs away from the player with arms in the air.</summary>
+        public float fear;
         public bool flashing, fleeing, frozen, active;
         public float fleeT;
         public Vector3 fleeDir;
@@ -23,6 +25,10 @@ namespace PastaSurvivors
         public Vector3 lockDir;
         public int cell;
         public float lift, spin;
+
+        // Navigation: walking direction (flow field or straight line) and whether they can see/throw at the player.
+        public Vector3 nav;
+        public bool los = true, walkClear = true;
 
         // Spaghetti Domino: launched Italians become projectiles for a moment.
         public float dominoTime, dominoDamage;
@@ -60,20 +66,21 @@ namespace PastaSurvivors
             var r = rig;
             if (r.torso == null) return;
             float amp = Mathf.Clamp01(moveSpeed / 2f);
-            float rate = fleeing ? 22f : 5f + moveSpeed * 2.4f;
+            bool panic = fleeing || fear > 0f;
+            float rate = panic ? 22f : 5f + moveSpeed * 2.4f;
             walkPhase += dt * rate;
             float s = Mathf.Sin(walkPhase);
             gesture += dt;
             if (r.legL != null)
             {
-                float legAmp = fleeing ? 55f : 34f * amp;
+                float legAmp = panic ? 55f : 34f * amp;
                 r.legL.localRotation = Quaternion.Euler(s * legAmp, 0, 0);
                 r.legR.localRotation = Quaternion.Euler(-s * legAmp, 0, 0);
             }
-            float bob = r.seated ? Mathf.Abs(Mathf.Sin(walkPhase * 0.5f)) * 0.03f : Mathf.Abs(Mathf.Cos(walkPhase)) * 0.07f * Mathf.Max(amp, fleeing ? 1f : 0f);
+            float bob = r.seated ? Mathf.Abs(Mathf.Sin(walkPhase * 0.5f)) * 0.03f : Mathf.Abs(Mathf.Cos(walkPhase)) * 0.07f * Mathf.Max(amp, panic ? 1f : 0f);
             r.torso.localPosition = new Vector3(0f, bob, 0f);
             if (r.armL == null) return;
-            if (fleeing)
+            if (panic)
             {
                 float w = Mathf.Sin(gesture * 24f) * 25f;
                 r.armL.localRotation = Quaternion.Euler(-165f + w, 0f, -25f);

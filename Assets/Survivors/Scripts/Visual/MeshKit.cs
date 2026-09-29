@@ -122,6 +122,20 @@ namespace PastaSurvivors
         /// <summary>Vertex colours are not gamma-corrected by Unity, so author in sRGB and convert here.</summary>
         public static Color Lin(Color c) => QualitySettings.activeColorSpace == ColorSpace.Linear ? c.linear : c;
 
+        /// <summary>Adds raw geometry whose colours are already linear (copied from a built mesh).</summary>
+        public void RawLinear(Vector3[] v, Vector3[] n, Vector2[] uv, int[] t, Color[] c)
+        {
+            int b = verts.Count;
+            for (int i = 0; i < v.Length; i++)
+            {
+                verts.Add(Frame.MultiplyPoint3x4(v[i]));
+                norms.Add(Frame.MultiplyVector(n[i]).normalized);
+                cols.Add(c.Length > i ? c[i] : Color.white);
+                uvs.Add(uv.Length > i ? uv[i] : Vector2.zero);
+            }
+            for (int i = 0; i < t.Length; i++) tris.Add(b + t[i]);
+        }
+
         public void Clear()
         {
             verts.Clear(); norms.Clear(); cols.Clear(); uvs.Clear(); tris.Clear();

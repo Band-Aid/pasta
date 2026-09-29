@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace PastaSurvivors
 {
@@ -43,13 +44,56 @@ namespace PastaSurvivors
         public bool FirstPerson { get; private set; }
         public float LookYaw, LookPitch = 8f;
         public Vector3 LookForward => Quaternion.Euler(LookPitch, LookYaw, 0f) * Vector3.forward;
-        /// <summary>Horizontal direction the main weapon fires in.</summary>
-        public Vector3 AimDir => FirstPerson ? Quaternion.Euler(0f, LookYaw, 0f) * Vector3.forward : Facing;
+        // ---- aiming (top-down): mouse cursor or twin-stick; otherwise weapons auto-target
+        public Vector3 MouseGround { get; private set; }
+        public bool MouseAiming => !FirstPerson && mouseAimTimer > 0f;
+        public bool StickAiming => !FirstPerson && stickAimTimer > 0f;
+        public bool HasAim => FirstPerson || MouseAiming || StickAiming;
+        private float mouseAimTimer, stickAimTimer;
+        private Vector3 stickAim = Vector3.forward;
+        private Vector2 lastMousePos;
+        private bool mouseMoveArmed;
 
-        /// <summary>Where the crosshair meets the ground (first person), clamped to a throwing range.</summary>
+        // ---- special weapon (特殊武器): picked up on the map, fired manually, then cools down
+        public SpecialId? Special { get; private set; }
+        public float SpecialCd { get; private set; }
+        public float SpecialCdMax => Special.HasValue ? GameData.Special(Special.Value).cooldown * CooldownMul : 1f;
+        public float SpecialReady => Special.HasValue ? 1f - Mathf.Clamp01(SpecialCd / SpecialCdMax) : 0f;
+        public float BuffTime { get; private set; }
+        /// <summary>Sugar espresso halves every weapon's cooldown while active.</summary>
+        public float BuffCdMul => BuffTime > 0f ? 0.5f : 1f;
+        public const int SpecialSlot = 11;
+        private float knifeTime, healFx, beamTime, beamTick, beamSfx;
+        private Vector3 beamDir = Vector3.forward;
+        public bool Beaming => beamTime > 0f;
+        private static readonly string[] BeamShouts = { "Dov'è l'espresso?!", "Che schifo!", "Caffè americano?!", "Nooo, il frappé!", "Vergogna!" };
+        private readonly List<Enemy> knifeHits = new List<Enemy>(64);
+
+        /// <summary>Horizontal direction the main weapon fires in.</summary>
+        public Vector3 AimDir
+        {
+            get
+            {
+                if (FirstPerson) return Quaternion.Euler(0f, LookYaw, 0f) * Vector3.forward;
+                if (StickAiming) return stickAim;
+                if (MouseAiming)
+                {
+                    var d = MouseGround - Position; d.y = 0f;
+                    if (d.sqrMagnitude > 0.04f) return d.normalized;
+                }
+                return Facing;
+            }
+        }
+
+        /// <summary>Ground point being aimed at (crosshair, mouse cursor), clamped to a throwing range.</summary>
         public Vector3 AimPoint(float maxDistance)
         {
-            if (!FirstPerson) return Position + Facing * Mathf.Min(6f, maxDistance);
+            if (MouseAiming)
+            {
+                var d = MouseGround - Position; d.y = 0f;
+                return Position + Vector3.ClampMagnitude(d, maxDistance);
+            }
+            if (!FirstPerson) return Position + AimDir * Mathf.Min(7f, maxDistance);
             var eye = Position + Vector3.up * PlayerAnim.EyeHeight;
             var f = LookForward;
             float dist = f.y < -0.05f ? Mathf.Min(maxDistance, eye.y / -f.y) : maxDistance;
@@ -99,6 +143,13 @@ namespace PastaSurvivors
             Xp = 0f;
             RunCoins = 0;
             invuln = dashCd = dashTime = 0f;
+            knifeTime = 0f;
+            beamTime = 0f;
+            BuffTime = 0f;
+            Special = null;
+            SpecialCd = 0f;
+            mouseAimTimer = stickAimTimer = 0f;
+            mouseMoveArmed = false;
             Velocity = Vector3.zero;
             Facing = Vector3.forward;
             MainIndex = 0;
@@ -185,6 +236,22 @@ namespace PastaSurvivors
                 LookPitch = Mathf.Clamp(LookPitch - look.y, -55f, 75f);
                 dir = Quaternion.Euler(0f, LookYaw, 0f) * dir;
             }
+            else
+            {
+                UpdateTopDownAim(dt);
+                // Hold the left mouse button to walk toward the cursor.
+                if (!Controls.MouseMoveHeld) mouseMoveArmed = true;
+                if (dir.sqrMagnitude < 0.01f && mouseMoveArmed && Controls.MouseMoveHeld)
+                {
+                    var to = MouseGround - Position; to.y = 0f;
+                    float d = to.magnitude;
+                    if (d > 0.6f) dir = to / d * Mathf.Clamp01(d / 1.5f);
+                }
+            }
+
+            SpecialCd -= dt;
+            BuffTime -= dt;
+            if (Controls.Special()) TryUseSpecial();
 
             dashCd -= dt;
             if (Controls.Dash() && dashCd <= 0f)
@@ -196,17 +263,21 @@ namespace PastaSurvivors
                 G.Fx.Burst(Position + Vector3.up * 0.3f, new Color(1f, 1f, 1f, 0.6f), 6, 2f, 0.7f, FxKind.Puff);
             }
 
-            Vector3 target = dir * MoveSpeed;
+            Vector3 target = dir * MoveSpeed * (BuffTime > 0f ? 1.4f : 1f) * (beamTime > 0f ? 0.55f : 1f);
             if (dashTime > 0f)
             {
                 dashTime -= dt;
-                target = dashDir * 21f;
+                target = dashDir * (knifeTime > 0f ? 30f : 21f);
+                if (knifeTime > 0f) KnifeSweep();
                 Velocity = target;
                 if (Random.value < 0.5f) G.Fx.Burst(Position + Vector3.up * 0.2f, new Color(1f, 1f, 1f, 0.35f), 1, 0.5f, 0.6f, FxKind.Puff);
             }
             else Velocity = Vector3.MoveTowards(Velocity, target, dt * 70f);
 
-            if (FirstPerson) Facing = AimDir;
+            knifeTime -= dt;
+            if (beamTime > 0f) TickBeam(dt);
+            if (beamTime > 0f && !FirstPerson) Facing = beamDir;
+            else if (FirstPerson || (HasAim && knifeTime <= 0f)) Facing = AimDir;
             else if (dir.sqrMagnitude > 0.01f) Facing = Vector3.Slerp(Facing, dir.normalized, 1f - Mathf.Exp(-18f * dt)).normalized;
 
             var next = transform.position + Velocity * dt;
@@ -217,9 +288,206 @@ namespace PastaSurvivors
             invuln -= dt;
             hurtFlash -= dt;
             if (Regen > 0f) Heal(Regen * dt, false);
+            if (Hp < MaxHp && G.Arena.InArea(Position, Arena.AreaKind.Heal))
+            {
+                Heal(G.Arena.DrawHeal(Position, Mathf.Min(4f * dt, MaxHp - Hp)), false);
+                healFx -= dt;
+                if (healFx <= 0f)
+                {
+                    healFx = 0.35f;
+                    G.Fx.Burst(Position + Vector3.up * 0.6f, new Color(0.5f, 1f, 0.6f, 0.9f), 2, 1.5f, 0.25f, FxKind.Spark);
+                }
+            }
+            if (BuffTime > 0f && Random.value < 0.3f)
+                G.Fx.Burst(Position + Vector3.up * 1.2f, new Color(1f, 0.9f, 0.6f, 0.9f), 1, 1.5f, 0.2f, FxKind.Spark);
 
             for (int i = 0; i < Weapons.Count; i++) Weapons[i].Tick(dt);
             Anim.Tick(dt, Velocity.magnitude, Facing, hurtFlash > 0f, dashTime > 0f);
+        }
+
+        private void UpdateTopDownAim(float dt)
+        {
+            mouseAimTimer -= dt;
+            stickAimTimer -= dt;
+            if (Controls.TestMouseWorld.HasValue)
+            {
+                MouseGround = Controls.TestMouseWorld.Value;
+                mouseAimTimer = 3f;
+            }
+            else if (Mouse.current != null && G.Cam != null && G.Cam.Cam != null)
+            {
+                var mp = Controls.MousePosition;
+                if ((mp - lastMousePos).sqrMagnitude > 4f || Controls.MouseAnyButton) mouseAimTimer = 3f;
+                lastMousePos = mp;
+                var ray = G.Cam.Cam.ScreenPointToRay(mp);
+                if (ray.direction.y < -0.01f)
+                {
+                    float t = -ray.origin.y / ray.direction.y;
+                    MouseGround = ray.origin + ray.direction * t;
+                }
+            }
+            var stick = Controls.AimStick();
+            if (stick != Vector2.zero)
+            {
+                stickAim = new Vector3(stick.x, 0f, stick.y).normalized;
+                stickAimTimer = 0.8f;
+                mouseAimTimer = 0f;
+            }
+        }
+
+        // ---------------- special weapons ----------------
+
+        public void GiveSpecial(SpecialId id)
+        {
+            Special = id;
+            SpecialCd = Mathf.Min(SpecialCd, 0.4f);
+            G.Sfx.Play(SfxId.Chest, 0.6f, 1.3f);
+            if (G.Hud != null) G.Hud.SpecialAcquired(id);
+        }
+
+        private void TryUseSpecial()
+        {
+            if (!Special.HasValue) return;
+            if (SpecialCd > 0f) { G.Sfx.Play(SfxId.Select, 0.4f, 0.6f); return; }
+            UseSpecial(Special.Value);
+            SpecialCd = SpecialCdMax;
+        }
+
+        public void UseSpecial(SpecialId id)
+        {
+            var dir = AimDir;
+            if (!HasAim)
+            {
+                // No manual aim: point it at the nearest Italian so a keyboard-only player still hits things.
+                var t = G.Enemies.Nearest(Position, 16f);
+                if (t != null) { var d = t.pos - Position; d.y = 0f; if (d.sqrMagnitude > 0.01f) dir = d.normalized; }
+            }
+            switch (id)
+            {
+                case SpecialId.Bazooka:
+                    {
+                        var s = G.Shots.Fire(ShotKind.Bazooka, Motion.Straight, Position + Vector3.up * 1.2f + dir * 0.6f, dir * 22f, 20f * Might, 0.7f, 1.3f, SpecialSlot);
+                        s.pierce = 1;
+                        s.scale = 1.4f;
+                        s.explodeRadius = 4.8f * AreaMul;
+                        s.explodeDamage = 70f * Might;
+                        s.explodeKnock = 9f;
+                        Anim.Throw();
+                        G.Sfx.Play(SfxId.Slam, 0.6f, 1.5f);
+                        G.Cam.Kick(3f);
+                        break;
+                    }
+                case SpecialId.KnifeDash:
+                    dashDir = dir;
+                    dashTime = 0.3f;
+                    knifeTime = 0.3f;
+                    knifeHits.Clear();
+                    G.Sfx.Play(SfxId.Whoosh, 0.9f, 1.8f);
+                    G.Sfx.Play(SfxId.Snap, 0.6f, 1.4f);
+                    break;
+                case SpecialId.Parmesan:
+                    {
+                        var target = HasAim ? AimPoint(14f) : Position + dir * 7f;
+                        target = G.Arena.Clamp(target, 1f);
+                        var s = G.Shots.Fire(ShotKind.Parmesan, Motion.Lob, Position + Vector3.up * 1.4f, Vector3.zero, 0f, 0.3f, 0.6f, SpecialSlot);
+                        s.target = target;
+                        s.spinRate = 600f;
+                        float area = AreaMul, might = Might, dur = DurationMul;
+                        s.onEnd = x =>
+                        {
+                            var zone = G.Shots.Zone(x.target, 4.6f * area, 8f * might, 3.5f * dur, 0.5f, SpecialSlot, new Color(1f, 0.95f, 0.65f, 0.5f), 1f);
+                            zone.sticky = true;
+                            for (int i = 0; i < 16; i++)
+                                G.Fx.Burst(x.target + Random.insideUnitSphere * 3f + Vector3.up, new Color(1f, 0.96f, 0.75f, 0.7f), 1, 1.5f, 2.2f, FxKind.Puff);
+                            G.Sfx.Play(SfxId.Poof, 0.9f, 0.6f);
+                        };
+                        Anim.Throw();
+                        break;
+                    }
+                case SpecialId.Sprinkler:
+                    G.Shots.Turret(Position + Facing * 1.2f, 8f * DurationMul, 9f * Might, SpecialSlot);
+                    G.Sfx.Play(SfxId.Splat, 0.7f, 0.8f);
+                    break;
+                case SpecialId.StarBeam:
+                    beamTime = 2.6f * DurationMul;
+                    beamDir = dir;
+                    beamTick = 0f;
+                    beamSfx = 0f;
+                    Anim.SetBeaming(true);
+                    G.Fx.Shout(Position + Vector3.up * 2.6f, "スタ〇ビーム!!", new Color(0.4f, 1f, 0.6f));
+                    G.Cam.Shake(0.25f);
+                    break;
+                case SpecialId.SugarEspresso:
+                    BuffTime = 7f * DurationMul;
+                    G.Sfx.Play(SfxId.LevelUp, 0.7f, 1.5f);
+                    G.Fx.Ring(Position + Vector3.up * 0.1f, 3f, new Color(1f, 0.85f, 0.4f, 0.9f), 0.5f, 0.5f);
+                    G.Fx.Shout(Position + Vector3.up * 2.6f, "ZUCCHERO!!", new Color(1f, 0.9f, 0.5f));
+                    break;
+            }
+        }
+
+        /// <summary>Sta○ Beam: a sweeping beam that stops at cover, damages and scares everything it touches.</summary>
+        private void TickBeam(float dt)
+        {
+            beamTime -= dt;
+            Vector3 want = beamDir;
+            if (HasAim) want = AimDir;
+            else
+            {
+                var t = G.Enemies.Nearest(Position, 18f, -1, true);
+                if (t != null) { var d = t.pos - Position; d.y = 0f; if (d.sqrMagnitude > 0.01f) want = d.normalized; }
+            }
+            beamDir = Vector3.Slerp(beamDir, want, 1f - Mathf.Exp(-7f * dt)).normalized;
+            var origin = Position + Vector3.up * 1.2f + beamDir * 0.7f;
+            float length = 0.5f;
+            while (length < 18f && !G.Arena.ShotBlocked(origin + beamDir * length)) length += 0.5f;
+            G.Fx.Beam(origin, beamDir, length, beamTime > 0f);
+            beamSfx -= dt;
+            if (beamSfx <= 0f) { beamSfx = 0.4f; G.Sfx.Play(SfxId.Beam, 0.55f, Random.Range(0.95f, 1.05f)); }
+            beamTick -= dt;
+            if (beamTick <= 0f)
+            {
+                beamTick = 0.12f;
+                float now = Time.time;
+                for (float d = 0.6f; d <= length; d += 1.2f)
+                {
+                    int n = G.Enemies.Query(origin + beamDir * d, 1.1f, knifeHits);
+                    for (int i = 0; i < n; i++)
+                    {
+                        var e = knifeHits[i];
+                        if (e.immune[SpecialSlot] > now) continue;
+                        e.immune[SpecialSlot] = now + 0.11f;
+                        G.Enemies.Damage(e, 12f * Might, beamDir, 1.5f, SpecialSlot);
+                        if (!e.IsBoss && e.active && !e.fleeing)
+                        {
+                            if (e.fear <= 0f) G.Enemies.ShoutCustom(e, BeamShouts[Random.Range(0, BeamShouts.Length)], new Color(0.7f, 1f, 0.75f));
+                            e.fear = Mathf.Max(e.fear, 2f);
+                        }
+                    }
+                }
+            }
+            if (beamTime <= 0f)
+            {
+                G.Fx.Beam(origin, beamDir, 0f, false);
+                Anim.SetBeaming(false);
+            }
+        }
+
+        private void KnifeSweep()
+        {
+            int n = G.Enemies.Query(Position, 1.7f, knifeHits);
+            float now = Time.time;
+            for (int i = 0; i < n; i++)
+            {
+                var e = knifeHits[i];
+                if (e.immune[SpecialSlot] > now) continue;
+                e.immune[SpecialSlot] = now + 0.5f;
+                var side = Vector3.Cross(Vector3.up, dashDir);
+                var push = side * Mathf.Sign(Vector3.Dot(e.pos - Position, side) + 0.001f);
+                G.Enemies.Damage(e, 45f * Might, push, 5f, SpecialSlot);
+                G.Fx.Burst(e.Center, new Color(1f, 1f, 1f, 0.9f), 4, 5f, 0.15f, FxKind.Spark);
+            }
+            if (Random.value < 0.8f) G.Fx.Burst(Position + Vector3.up * 1f, new Color(0.85f, 0.9f, 1f, 0.8f), 2, 0.5f, 0.5f, FxKind.Spark);
         }
 
         /// <summary>Damage taken per source, for balance telemetry.</summary>

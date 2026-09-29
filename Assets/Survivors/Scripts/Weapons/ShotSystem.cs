@@ -5,7 +5,7 @@ using UnityEngine.Rendering;
 
 namespace PastaSurvivors
 {
-    public enum Motion { Straight, Boomerang, Bounce, Orbit, Lob, Zone, Seek }
+    public enum Motion { Straight, Boomerang, Bounce, Orbit, Lob, Zone, Seek, Turret }
 
     public class Shot
     {
@@ -23,7 +23,7 @@ namespace PastaSurvivors
         public Motion motion;
         public float angle, orbitRadius, orbitSpeed;
         public float tickTimer, tickInterval, slow;
-        public float explodeRadius, explodeDamage;
+        public float explodeRadius, explodeDamage, explodeKnock = 3f;
         public bool sticky;
         public int bounces;
         public Action<Shot> onEnd;
@@ -65,6 +65,7 @@ namespace PastaSurvivors
             s.bounces = 0;
             s.onEnd = null;
             s.explodeRadius = 0f;
+            s.explodeKnock = 3f;
             s.slow = 0f;
             s.sticky = false;
             s.spin = UnityEngine.Random.value * 360f;
@@ -110,6 +111,29 @@ namespace PastaSurvivors
             s.hostile = true;
             s.spinRate = kind == ShotKind.Meatball ? 0f : 720f;
             s.scale = kind == ShotKind.Meatball ? 1.4f : 1.3f;
+            return s;
+        }
+
+        /// <summary>A placed ketchup sprinkler: sprays droplets in a rotating pattern.</summary>
+        public Shot Turret(Vector3 pos, float duration, float damage, int slot)
+        {
+            var s = Get("turret", ShotKind.Ketchup, false);
+            if (s.mr.GetComponent<MeshFilter>().sharedMesh != Models.Get("sprinkler"))
+                s.mr.GetComponent<MeshFilter>().sharedMesh = Models.Get("sprinkler");
+            s.motion = Motion.Turret;
+            s.pos = G.Arena.Resolve(new Vector3(pos.x, 0f, pos.z), 0.5f);
+            s.vel = Vector3.zero;
+            s.damage = damage;
+            s.radius = 0f;
+            s.life = s.maxLife = duration;
+            s.tickInterval = 0.07f;
+            s.tickTimer = 0f;
+            s.slot = slot;
+            s.angle = 0f;
+            s.scale = 1.3f;
+            s.spinRate = 0f;
+            s.tr.SetPositionAndRotation(s.pos, Quaternion.identity);
+            s.tr.localScale = Vector3.one * s.scale;
             return s;
         }
 
@@ -163,7 +187,26 @@ namespace PastaSurvivors
                 {
                     case Motion.Straight:
                         s.pos += s.vel * dt;
+                        if (G.Arena.ShotBlocked(s.pos)) { end = true; G.Fx.Burst(s.pos, s.hostile ? new Color(0.9f, 0.85f, 0.8f) : Models.PastaGold, 4, 3f, 0.15f, FxKind.Crumb); }
                         break;
+                    case Motion.Turret:
+                        {
+                            s.tickTimer -= dt;
+                            s.angle += dt * 4.2f;
+                            s.tr.rotation = Quaternion.Euler(0f, s.angle * Mathf.Rad2Deg, 0f);
+                            while (s.tickTimer <= 0f)
+                            {
+                                s.tickTimer += s.tickInterval;
+                                for (int k = 0; k < 2; k++)
+                                {
+                                    float a = s.angle + k * Mathf.PI;
+                                    var d = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
+                                    var drop = Fire(ShotKind.Drop, Motion.Straight, s.pos + Vector3.up * 1.4f + d * 0.4f, d * 13f, s.damage, 0.35f, 0.75f, s.slot);
+                                    drop.knock = 1.2f;
+                                }
+                            }
+                            break;
+                        }
                     case Motion.Seek:
                         {
                             var t = G.Enemies.Nearest(s.pos, 12f);
@@ -179,7 +222,11 @@ namespace PastaSurvivors
                         {
                             float t = s.maxLife - s.life;
                             float outTime = s.orbitSpeed;
-                            if (t < outTime) s.pos += s.dir * s.speed * (1f - t / outTime) * dt;
+                            if (t < outTime)
+                            {
+                                s.pos += s.dir * s.speed * (1f - t / outTime) * dt;
+                                if (G.Arena.ShotBlocked(s.pos)) s.life = s.maxLife - outTime - 0.001f; // hit cover: come back early
+                            }
                             else
                             {
                                 var back = pp + Vector3.up * 0.8f - s.pos;
@@ -191,7 +238,16 @@ namespace PastaSurvivors
                         }
                     case Motion.Bounce:
                         {
+                            var before = s.pos;
                             s.pos += s.vel * dt;
+                            if (G.Arena.ShotBlocked(s.pos))
+                            {
+                                // Ricochet off cover: flip the axis that caused the hit.
+                                if (G.Arena.ShotBlocked(new Vector3(s.pos.x, s.pos.y, before.z))) s.vel.x = -s.vel.x;
+                                else s.vel.z = -s.vel.z;
+                                s.pos = before;
+                                OnBounce(s);
+                            }
                             // Bounce inside the visible play window around the player.
                             float hx = 15f, hz = 10f;
                             if (s.pos.x > pp.x + hx && s.vel.x > 0 || s.pos.x < pp.x - hx && s.vel.x < 0) { s.vel.x = -s.vel.x; OnBounce(s); }
@@ -234,7 +290,7 @@ namespace PastaSurvivors
                         }
                 }
 
-                if (s.motion != Motion.Zone && s.motion != Motion.Lob)
+                if (s.motion != Motion.Zone && s.motion != Motion.Lob && s.motion != Motion.Turret)
                 {
                     if (s.hostile)
                     {
@@ -252,10 +308,10 @@ namespace PastaSurvivors
                     if (!G.Arena.Inside(s.pos, -3f)) end = true;
                 }
 
-                if (s.motion != Motion.Zone) Place(s, dt);
+                if (s.motion != Motion.Zone && s.motion != Motion.Turret) Place(s, dt);
                 if (end)
                 {
-                    if (s.explodeRadius > 0f) Explode(s.pos, s.explodeRadius, s.explodeDamage, s.slot);
+                    if (s.explodeRadius > 0f) Explode(s.pos, s.explodeRadius, s.explodeDamage, s.slot, s.explodeKnock, s.kind == ShotKind.Bazooka);
                     s.onEnd?.Invoke(s);
                     Recycle(s);
                     Active.RemoveAt(i);
@@ -266,14 +322,21 @@ namespace PastaSurvivors
         private void OnBounce(Shot s)
         {
             s.bounces++;
-            if (s.explodeRadius > 0f) Explode(s.pos, s.explodeRadius, s.explodeDamage, s.slot);
+            if (s.explodeRadius > 0f) Explode(s.pos, s.explodeRadius, s.explodeDamage, s.slot, s.explodeKnock, false);
         }
 
-        public void Explode(Vector3 pos, float radius, float damage, int slot)
+        public void Explode(Vector3 pos, float radius, float damage, int slot, float knock = 3f, bool big = false)
         {
             G.Fx.Ring(new Vector3(pos.x, 0.1f, pos.z), radius, new Color(1f, 0.85f, 0.2f, 0.8f), 0.35f, 0.35f);
-            G.Fx.Burst(pos, new Color(1f, 0.85f, 0.15f), 10, 7f, 0.22f, FxKind.Crumb);
-            G.Sfx.Play(SfxId.Pop, 0.35f, 1.2f);
+            G.Fx.Burst(pos, new Color(1f, 0.85f, 0.15f), big ? 40 : 10, big ? 12f : 7f, 0.22f, FxKind.Crumb);
+            if (big)
+            {
+                G.Fx.Slam(new Vector3(pos.x, 0f, pos.z), radius);
+                G.Sfx.Play(SfxId.Snap, 1f, 0.7f);
+                G.Sfx.Play(SfxId.Slam, 0.9f, 0.9f);
+                G.Cam.Shake(0.5f);
+            }
+            else G.Sfx.Play(SfxId.Pop, 0.35f, 1.2f);
             int n = G.Enemies.Query(pos, radius, hits);
             float now = Time.time;
             for (int i = 0; i < n; i++)
@@ -281,7 +344,7 @@ namespace PastaSurvivors
                 var e = hits[i];
                 if (e.immune[Enemy.SlotExplosion] > now) continue;
                 e.immune[Enemy.SlotExplosion] = now + 0.3f;
-                G.Enemies.Damage(e, damage, e.pos - pos, 3f, slot);
+                G.Enemies.Damage(e, damage, e.pos - pos, knock, slot);
             }
         }
 
@@ -332,6 +395,7 @@ namespace PastaSurvivors
             switch (s.kind)
             {
                 case ShotKind.Penne:
+                case ShotKind.Bazooka:
                     rot = Quaternion.LookRotation(s.vel.sqrMagnitude > 0.01f ? s.vel : Vector3.forward) * Quaternion.Euler(0, 0, s.spin);
                     break;
                 case ShotKind.Fusilli:
@@ -341,6 +405,7 @@ namespace PastaSurvivors
                         break;
                     }
                 case ShotKind.Ketchup:
+                case ShotKind.Parmesan:
                     rot = Quaternion.Euler(s.spin, s.spin * 0.3f, 0);
                     break;
                 case ShotKind.Meatball:

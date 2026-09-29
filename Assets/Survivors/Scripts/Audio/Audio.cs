@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace PastaSurvivors
 {
-    public enum SfxId { Snap, Pop, Slam, Whoosh, Splat, Gem, Coin, Heal, Magnet, Hurt, Poof, Throw, Vroom, Boss, LevelUp, Chest, Crate, Dash, Select, Confirm, Evolve }
+    public enum SfxId { Snap, Pop, Slam, Whoosh, Splat, Gem, Coin, Heal, Magnet, Hurt, Poof, Throw, Vroom, Boss, LevelUp, Chest, Crate, Dash, Select, Confirm, Evolve, Beam }
 
     /// <summary>All sound effects are synthesised at startup; a small voice pool with per-sound rate limiting keeps hordes from clipping.</summary>
     public class Sfx : MonoBehaviour
@@ -45,6 +45,8 @@ namespace PastaSurvivors
             clips[SfxId.Dash] = Make("dash", 0.22f, (t, n) => n * Mathf.Sin(Mathf.PI * t / 0.22f) * 0.4f + Mathf.Sin(2 * Mathf.PI * (200f + 600f * t) * t) * 0.15f * Env(t, 0.01f, 8f));
             clips[SfxId.Select] = Make("select", 0.05f, (t, n) => Sq(t * 880f) * Env(t, 0.001f, 60f) * 0.25f);
             clips[SfxId.Confirm] = Make("confirm", 0.18f, (t, n) => (Sq(t * (t < 0.06f ? 660f : 990f))) * Env(t, 0.001f, 14f) * 0.3f);
+            clips[SfxId.Beam] = Make("beam", 0.5f, (t, n) => (Saw(t * 180f) * 0.25f + Saw(t * 271f) * 0.2f + Mathf.Sin(2 * Mathf.PI * 880f * t) * 0.12f * Mathf.Sin(t * 60f) + n * 0.12f)
+                * Mathf.Min(1f, t / 0.04f) * Mathf.Min(1f, (0.5f - t) / 0.08f));
             clips[SfxId.Evolve] = Make("evolve", 1.6f, (t, n) => Arp(t, new[] { 262f, 330f, 392f, 523f, 659f, 784f, 1047f, 1319f }, 0.1f) * 0.5f + Mathf.Sin(2 * Mathf.PI * 131f * t) * Env(t, 0.1f, 1.5f) * 0.2f);
         }
 

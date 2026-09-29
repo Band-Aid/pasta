@@ -45,6 +45,7 @@ namespace PastaSurvivors
             G.Pickups = Child<PickupManager>("Pickups"); G.Pickups.Init();
             G.Fx = Child<Fx>("Fx"); G.Fx.Init();
             G.Waves = Child<WaveDirector>("Waves");
+            G.Hazards = Child<Hazards>("HazardsRoot");
             G.Hud = Child<Hud>("Hud"); G.Hud.Build(transform);
             Menus = Child<Menus>("MenusRoot"); Menus.Build(transform);
 
@@ -72,7 +73,9 @@ namespace PastaSurvivors
             world = new GameObject("World").transform;
             G.Stage = GameData.Stages[stage];
             G.Arena = StageBuilder.Build(G.Stage, world);
+            G.Arena.BuildGrid();
             G.Enemies.ConfigureGrid(G.Arena);
+            G.Hud.BuildMinimap(G.Arena);
             builtStage = stage;
             Resources.UnloadUnusedAssets();
         }
@@ -81,6 +84,7 @@ namespace PastaSurvivors
         {
             StopAllCoroutines();
             G.Enemies.Clear();
+            G.Hazards.Clear();
             G.Shots.Clear();
             G.Pickups.Clear();
             G.Fx.Clear();
@@ -116,7 +120,7 @@ namespace PastaSurvivors
             State = GameState.Title;
             BuildWorld(0);
             var p = CreatePlayer(SelectedCharacter);
-            p.transform.position = new Vector3(0f, 0f, 2f);
+            p.transform.position = G.Arena.spawn;
             p.ResetRun();
             // A circle of outraged Italians for the title card.
             EnemyKind[] cast = { EnemyKind.Signore, EnemyKind.Mamma, EnemyKind.Chef, EnemyKind.Tifoso, EnemyKind.Gondoliere, EnemyKind.Nonna, EnemyKind.Pizzaiolo, EnemyKind.Mafioso, EnemyKind.Vespista, EnemyKind.Tifoso };
@@ -149,17 +153,19 @@ namespace PastaSurvivors
             SelectedCharacter = character;
             BuildWorld(stage);
             var p = CreatePlayer(character);
-            p.transform.position = Vector3.zero;
+            p.transform.position = G.Arena.spawn;
+            G.Arena.UpdateFlow(G.Arena.spawn);
+            G.Hazards.Begin();
             p.ResetRun();
             G.Cam.orbit = false;
             G.Cam.yaw = 0f;
             G.Cam.pitch = 55f;
             G.Cam.distance = 23f;
             G.Cam.Snap(p.Position);
-            ApplyViewMode();
             G.Waves.Begin(G.Stage);
             Time.timeScale = TimeMultiplier;
             State = GameState.Playing;
+            ApplyViewMode();
             Menus.Close();
             G.Hud.SetVisible(true);
             G.Hud.StageIntro(G.Stage.name, G.Stage.sub);
@@ -186,10 +192,12 @@ namespace PastaSurvivors
 
         private void UpdateCursor()
         {
-            bool locked = State == GameState.Playing && SaveData.FirstPerson && Application.isFocused;
-            var mode = locked ? CursorLockMode.Locked : CursorLockMode.None;
+            bool playing = State == GameState.Playing && Application.isFocused;
+            // First person locks the mouse for looking; top-down keeps it in the window and swaps it for a ground reticle.
+            var mode = !playing ? CursorLockMode.None : SaveData.FirstPerson ? CursorLockMode.Locked : CursorLockMode.Confined;
             if (Cursor.lockState != mode) Cursor.lockState = mode;
-            if (Cursor.visible == locked) Cursor.visible = !locked;
+            bool visible = !playing;
+            if (Cursor.visible != visible) Cursor.visible = visible;
         }
 
         private void Update()
@@ -199,6 +207,13 @@ namespace PastaSurvivors
             switch (State)
             {
                 case GameState.Title:
+                    if (Controls.ToggleView() && Menus.Current == "title")
+                    {
+                        SaveData.ViewMode = SaveData.FirstPerson ? 0 : 1;
+                        SaveData.Save();
+                        Menus.ShowTitle();
+                        Menus.Nav.index = 2;
+                    }
                     G.Enemies.Tick(Time.deltaTime);
                     G.Player?.Anim.Tick(Time.deltaTime, 0f, Vector3.back, false, false);
                     break;
@@ -225,6 +240,7 @@ namespace PastaSurvivors
             G.RunTime += dt;
             if (bossDefeatedAt < 0f) G.Waves.Tick(dt, G.RunTime);
             G.Player.Tick(dt);
+            G.Hazards.Tick(dt);
             G.Enemies.Tick(dt);
             G.Shots.Tick(dt);
             G.Pickups.Tick(dt);
@@ -272,6 +288,7 @@ namespace PastaSurvivors
         }
 
         public List<Offer> LastOffers { get; private set; }
+        public IReadOnlyDictionary<int, float> DamageBySlot => damage;
         public void QueueLevelUp() => pendingLevelUps++;
         public void OpenChest() => pendingChests++;
         public void RecordDamage(int slot, float amount)

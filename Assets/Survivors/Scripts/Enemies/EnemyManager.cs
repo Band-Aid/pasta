@@ -17,7 +17,7 @@ namespace PastaSurvivors
         private readonly List<Enemy> scratch = new List<Enemy>(256);
         private Transform poolRoot;
         private int nextUid = 1;
-        private float buffTick, shoutBudget;
+        private float buffTick, shoutBudget, flowTimer;
 
         // Uniform grid rebuilt every frame (counting sort).
         private const float Cell = 2.5f;
@@ -65,7 +65,7 @@ namespace PastaSurvivors
             e.damage = def.damage * DamageMul;
             e.speedMul = 1f;
             e.knock = Vector3.zero;
-            e.stun = e.slow = e.buff = e.flash = 0f;
+            e.stun = e.slow = e.buff = e.flash = e.fear = 0f;
             e.state = 0; e.pattern = -1; e.volleys = 0;
             e.stateTimer = def.IsBoss ? 2.5f : 0f;
             e.attackTimer = UnityEngine.Random.Range(0.5f, def.attackCooldown);
@@ -77,6 +77,8 @@ namespace PastaSurvivors
             var toPlayer = G.Player != null ? G.Player.Position - e.pos : Vector3.back;
             toPlayer.y = 0;
             e.facing = toPlayer.sqrMagnitude > 0.01f ? toPlayer.normalized : Vector3.back;
+            e.nav = e.facing;
+            e.los = e.walkClear = true;
             e.rig.root.localScale = Vector3.one * e.scale;
             e.rig.root.gameObject.SetActive(true);
             e.ApplyTransform();
@@ -120,6 +122,13 @@ namespace PastaSurvivors
             float pr = player != null ? player.Radius : 0.4f;
             float now = Time.time;
             shoutBudget = Mathf.Min(3f, shoutBudget + dt * 2.5f);
+            flowTimer -= dt;
+            if (flowTimer <= 0f && player != null && G.Arena != null)
+            {
+                G.Arena.UpdateFlow(pp);
+                flowTimer = 0.2f;
+            }
+            int frame = Time.frameCount;
             buffTick -= dt;
             bool doBuff = buffTick <= 0f;
             if (doBuff) buffTick = 0.4f;
@@ -142,12 +151,24 @@ namespace PastaSurvivors
 
                 e.flash -= dt;
                 e.SetFlash(e.flash > 0f);
-                e.stun -= dt; e.slow -= dt; e.buff -= dt; e.attackTimer -= dt;
+                e.stun -= dt; e.slow -= dt; e.buff -= dt; e.attackTimer -= dt; e.fear -= dt;
 
                 Vector3 toP = pp - e.pos; toP.y = 0f;
                 float dist = toP.magnitude;
                 Vector3 dirP = dist > 0.001f ? toP / dist : Vector3.forward;
                 Vector3 move = Vector3.zero;
+                // Walk straight when the way is clear, otherwise follow the flow field around walls and over bridges.
+                if (((frame + e.uid) & 3) == 0)
+                {
+                    e.los = G.Arena.LineOfSight(e.pos, pp);
+                    e.walkClear = dist < 18f && G.Arena.WalkClear(e.pos, pp, e.radius * 0.8f);
+                }
+                if (dist < 2.2f || e.walkClear) e.nav = dirP;
+                else
+                {
+                    var flow = G.Arena.FlowDir(e.pos);
+                    e.nav = flow.sqrMagnitude > 0.01f ? flow : dirP;
+                }
                 float speed = e.def.speed * e.speedMul * (e.slow > 0f ? 0.55f : 1f) * (e.buff > 0f ? 1.4f : 1f);
 
                 if (e.dominoTime > 0f)
@@ -158,6 +179,12 @@ namespace PastaSurvivors
                 {
                     move = Vector3.zero;
                 }
+                else if (e.fear > 0f && !e.IsBoss)
+                {
+                    // Scared off by chain-store coffee: run the other way.
+                    move = -dirP * speed * 1.3f;
+                    e.state = 0;
+                }
                 else
                 {
                     switch (e.def.behavior)
@@ -167,10 +194,10 @@ namespace PastaSurvivors
                         case Behavior.Sweeper: move = TickSweeper(e, dt, dirP, dist, speed); break;
                         case Behavior.Boss: move = TickBoss(e, dt, dirP, dist, speed); break;
                         case Behavior.Elite:
-                            move = dirP * speed;
+                            move = e.nav * speed;
                             if (doBuff) BuffAround(e);
                             break;
-                        default: move = dirP * speed; break;
+                        default: move = e.nav * speed; break;
                     }
                 }
 
@@ -270,14 +297,14 @@ namespace PastaSurvivors
                 }
                 return Vector3.zero;
             }
-            if (dist < e.def.attackRange && e.attackTimer <= 0f && dist > 2.5f)
+            if (dist < e.def.attackRange && e.attackTimer <= 0f && dist > 2.5f && e.los)
             {
                 e.state = 1;
                 e.stateTimer = 0.55f;
                 return Vector3.zero;
             }
             float keep = e.def.kind == EnemyKind.Pizzaiolo && dist < 6f ? -0.4f : dist < e.def.attackRange ? 0.6f : 1f;
-            return dirP * speed * keep;
+            return e.nav * speed * keep;
         }
 
         private Vector3 TickCharger(Enemy e, float dt, Vector3 dirP, float dist, float speed)
@@ -297,14 +324,14 @@ namespace PastaSurvivors
                 case 2:
                     e.stateTimer -= dt;
                     e.facing = e.lockDir;
-                    if (e.stateTimer <= 0f || !G.Arena.Inside(e.pos, e.radius + 0.3f))
+                    if (e.stateTimer <= 0f || !G.Arena.Inside(e.pos, e.radius + 0.3f) || G.Arena.Blocked(e.pos + e.lockDir * (e.radius + 0.35f), 0.05f))
                     {
                         e.state = 0;
                         e.attackTimer = e.def.attackCooldown;
                     }
                     return e.lockDir * 12.5f;
                 default:
-                    if (dist < e.def.attackRange && e.attackTimer <= 0f)
+                    if (dist < e.def.attackRange && e.attackTimer <= 0f && e.los && e.walkClear)
                     {
                         e.state = 1;
                         e.stateTimer = 0.75f;
@@ -312,7 +339,7 @@ namespace PastaSurvivors
                         G.Fx.Telegraph(TeleShape.Lane, e.pos, dirP, 16f, 1.3f * e.scale, 0.75f);
                         return Vector3.zero;
                     }
-                    return dirP * speed;
+                    return e.nav * speed;
             }
         }
 
@@ -330,7 +357,7 @@ namespace PastaSurvivors
                     }
                     return Vector3.zero;
                 default:
-                    if (dist < e.def.attackRange && e.attackTimer <= 0f)
+                    if (dist < e.def.attackRange && e.attackTimer <= 0f && e.los)
                     {
                         e.state = 1;
                         e.stateTimer = 0.8f;
@@ -339,7 +366,7 @@ namespace PastaSurvivors
                         G.Fx.Telegraph(TeleShape.Sector, e.pos, dirP, e.def.attackRange + 0.4f, 130f, 0.8f);
                         return Vector3.zero;
                     }
-                    return dirP * speed;
+                    return e.nav * speed;
             }
         }
 
@@ -410,7 +437,7 @@ namespace PastaSurvivors
                             case BossMove.Radial: G.Fx.Telegraph(TeleShape.Circle, e.pos, dirP, 3.5f, 0f, wind); break;
                         }
                     }
-                    return dirP * speed * (dist > 4f ? 1f : 0.3f);
+                    return e.nav * speed * (dist > 4f ? 1f : 0.3f);
                 case 1:
                     e.facing = e.lockDir;
                     if (e.stateTimer <= 0f)
@@ -440,7 +467,7 @@ namespace PastaSurvivors
                     if (move == BossMove.Charge)
                     {
                         e.facing = e.lockDir;
-                        if (e.stateTimer <= 0f || !G.Arena.Inside(e.pos, e.radius + 0.5f)) { EndBossMove(e, pace); return Vector3.zero; }
+                        if (e.stateTimer <= 0f || !G.Arena.Inside(e.pos, e.radius + 0.5f) || G.Arena.Blocked(e.pos + e.lockDir * (e.radius + 0.4f), 0.05f)) { EndBossMove(e, pace); return Vector3.zero; }
                         return e.lockDir * (enraged ? 16f : 13f);
                     }
                     if (move == BossMove.Fan || move == BossMove.Radial)
@@ -681,13 +708,14 @@ namespace PastaSurvivors
             return results.Count;
         }
 
-        public Enemy Nearest(Vector3 p, float maxDist, int skipUid = -1)
+        /// <summary>Nearest Italian; with needLos, only ones not hidden behind cover (cached per enemy).</summary>
+        public Enemy Nearest(Vector3 p, float maxDist, int skipUid = -1, bool needLos = false)
         {
             Enemy best = null;
             float bestD = maxDist * maxDist;
             foreach (var e in Active)
             {
-                if (!e.Targetable || e.uid == skipUid) continue;
+                if (!e.Targetable || e.uid == skipUid || (needLos && !e.los)) continue;
                 float d = (e.pos - p).sqrMagnitude;
                 if (d < bestD) { bestD = d; best = e; }
             }
@@ -695,13 +723,13 @@ namespace PastaSurvivors
         }
 
         /// <summary>Up to <paramref name="count"/> distinct nearest targets (for multi-shot weapons).</summary>
-        public int NearestSeveral(Vector3 p, float maxDist, int count, List<Enemy> results)
+        public int NearestSeveral(Vector3 p, float maxDist, int count, List<Enemy> results, bool needLos = false)
         {
             results.Clear();
             float max2 = maxDist * maxDist;
             foreach (var e in Active)
             {
-                if (!e.Targetable) continue;
+                if (!e.Targetable || (needLos && !e.los)) continue;
                 float d = (e.pos - p).sqrMagnitude;
                 if (d > max2) continue;
                 if (results.Count < count) { results.Add(e); continue; }
@@ -728,6 +756,34 @@ namespace PastaSurvivors
                 if (UnityEngine.Random.Range(0, n) == 0) pick = e;
             }
             return pick;
+        }
+
+        private readonly List<Enemy> densityScratch = new List<Enemy>(64);
+
+        /// <summary>Samples Italians in range and returns the one standing in the thickest crowd.</summary>
+        public Enemy DensestNear(Vector3 p, float range, float radius, int samples, List<Vector3> avoid)
+        {
+            Enemy best = null;
+            int bestN = 0;
+            for (int s = 0; s < samples; s++)
+            {
+                var e = RandomNear(p, range);
+                if (e == null) break;
+                bool near = false;
+                if (avoid != null) foreach (var a in avoid) if ((a - e.pos).sqrMagnitude < radius * radius * 2.2f) { near = true; break; }
+                if (near) continue;
+                int n = Query(e.pos, radius, densityScratch);
+                if (n > bestN) { bestN = n; best = e; }
+            }
+            return best;
+        }
+
+        /// <summary>Rate-limited exclamation above an Italian.</summary>
+        public void ShoutCustom(Enemy e, string text, Color color)
+        {
+            if (shoutBudget < 1f) return;
+            shoutBudget -= 1f;
+            G.Fx.Shout(e.Center + Vector3.up, text, color);
         }
 
         public void ShoutFrom(Enemy e)

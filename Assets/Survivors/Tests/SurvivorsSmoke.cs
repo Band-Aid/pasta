@@ -22,7 +22,7 @@ namespace PastaSurvivors
         private bool done;
         private float moveAngle;
         /// <summary>Dismiss level-ups and chests that pop up while the script is doing something else.</summary>
-        private bool autoDismiss;
+        private bool autoDismiss, circling;
 
         private static bool Requested => Array.IndexOf(Environment.GetCommandLineArgs(), "-survivors-smoke") >= 0;
 
@@ -70,7 +70,7 @@ namespace PastaSurvivors
             var game = G.Game;
             if (autoDismiss && game != null && (game.State == GameState.LevelUp || game.State == GameState.Chest) && game.Menus.Nav.items.Count > 0)
                 game.Menus.Nav.items[game.State == GameState.Chest ? game.Menus.Nav.items.Count - 1 : 0].act?.Invoke();
-            if (Controls.TestMove.HasValue)
+            if (circling)
             {
                 moveAngle += Time.unscaledDeltaTime * 0.7f;
                 Controls.TestMove = new Vector2(Mathf.Cos(moveAngle), Mathf.Sin(moveAngle)) * 0.9f;
@@ -165,18 +165,116 @@ namespace PastaSurvivors
             Check(SaveData.Shop[0] == 1 && SaveData.Coins == 440, "Shop purchase spends coins and raises the level");
             yield return Shot("04-shop");
 
+            // First person chosen on the title screen must carry into the run.
+            game.GoTitle();
+            yield return Real(0.5f);
+            Controls.TestToggleView = true;
+            yield return Real(0.3f);
+            Check(SaveData.FirstPerson && game.Menus.Current == "title", "V on the title screen selects first person");
+            game.StartRun(0, 0);
+            yield return Real(1f);
+            Check(G.Cam.firstPerson && G.Player.FirstPerson, "Run started from the title honours the first-person setting");
+            yield return Shot("04b-fps-from-title");
+            Controls.TestToggleView = true;
+            yield return Real(0.3f);
+            Check(!G.Cam.firstPerson && !SaveData.FirstPerson, "V during play switches back to top-down");
+            Controls.TestToggleView = true;
+            yield return Real(0.3f);
+            Check(G.Cam.firstPerson && SaveData.FirstPerson, "V during play switches to first person");
+            SaveData.ViewMode = 0;
+            game.ApplyViewMode();
+            game.GoTitle();
+            yield return Real(0.5f);
+
             // ---------------- Stage 1: Roma ----------------
             game.StartRun(0, 0);
             yield return Real(1.5f);
             Check(game.State == GameState.Playing && G.Player != null && G.Player.Weapons.Count == 1, "Run starts with the character's weapon");
             Check(G.Player.Might > 1.04f, "Permanent shop bonus applies to the run");
             G.Player.God = true;
+            circling = true;
             Controls.TestMove = Vector2.right;
+            autoDismiss = true;
+
+            // Map strategy: cover, areas, pedestals, and Italians that path around walls.
+            var arena = G.Arena;
+            Check(arena.walls.Count >= 20 && arena.specialSpots.Count >= 5 && arena.areas.Exists(a => a.kind == Arena.AreaKind.Heal)
+                && arena.areas.Exists(a => a.kind == Arena.AreaKind.Market) && arena.roads.Count == 1, "Roma has walls, pedestals, heal and market areas and a road");
+            Check(!arena.LineOfSight(new Vector3(-40f, 0, 17f), new Vector3(-40f, 0, 33f)), "A house blocks line of sight");
+            var fountain = arena.areas.Find(a => a.kind == Arena.AreaKind.Heal);
+            float drawn = arena.DrawHeal(new Vector3(fountain.c.x, 0f, fountain.c.y), 1000f);
+            Check(drawn > 0f && drawn <= Arena.HealCapacity && arena.DrawHeal(new Vector3(fountain.c.x, 0f, fountain.c.y), 10f) == 0f, "Healing fountain runs dry and has to refill");
             yield return Real(7f);
             Check(G.Enemies.Kills > 0, "Spaghetti snap drives Italians away (kills " + G.Enemies.Kills + ")");
             Check(G.Pickups.Active.Count > 0 || G.Player.Xp > 0 || G.Player.Level > 1, "Italians drop experience");
             yield return Shot("05-roma-early");
 
+            // An Italian behind a house must walk around it to reach the player.
+            circling = false;
+            Controls.TestMove = Vector2.zero;
+            G.Player.transform.position = new Vector3(-40f, 0f, 32.2f);
+            var walker = G.Enemies.Spawn(EnemyKind.Tifoso, new Vector3(-40f, 0f, 16.5f), 5000f);
+            float bestDist = 99f;
+            for (int i = 0; i < 90 && walker != null && walker.active && bestDist > 2f; i++)
+            {
+                yield return Real(0.2f);
+                bestDist = Mathf.Min(bestDist, Vector3.Distance(walker.pos, G.Player.Position));
+            }
+            Check(bestDist < 2.5f, $"Flow field routes an Italian around a house (closest {bestDist:0.0} m)");
+            yield return Shot("05b-alley-pathing");
+
+            // Mouse: aim at the cursor, hold the button to walk there.
+            var start = G.Player.Position;
+            Controls.TestMouseWorld = start + new Vector3(8f, 0f, 0f);
+            yield return Real(0.3f);
+            Check(G.Player.MouseAiming && G.Player.AimDir.x > 0.9f, "Main weapon aims at the mouse cursor");
+            Controls.TestMouseHeld = true;
+            yield return Real(0.8f);
+            Check(G.Player.Position.x > start.x + 2f, "Holding the mouse button walks toward the cursor");
+            Controls.TestMouseHeld = false;
+
+            // Special weapons: pick each one up from a pedestal and fire it.
+            foreach (SpecialId id in System.Enum.GetValues(typeof(SpecialId)))
+            {
+                G.Player.transform.position = new Vector3(-14f + (int)id * 7f, 0f, -14f);
+                Controls.TestMouseWorld = G.Player.Position + new Vector3(0f, 0f, -9f);
+                G.Pickups.SpawnSpecial(id, G.Player.Position + new Vector3(0.5f, 0f, 0f));
+                Enemy victim = id == SpecialId.StarBeam ? G.Enemies.Spawn(EnemyKind.Signore, G.Player.Position + new Vector3(0f, 0f, -6f), 50f) : null;
+                yield return Real(0.6f); // a freshly picked-up special arms after 0.4 s
+                bool got = G.Player.Special.HasValue && G.Player.Special.Value == id;
+                Controls.TestSpecial = true;
+                yield return Real(0.25f);
+                Check(got && G.Player.SpecialCd > 0f, "Special weapon picked up and used: " + GameData.Special(id).name);
+                if (victim != null)
+                {
+                    yield return Real(0.4f);
+                    Check(victim.fear > 0f || !victim.active || victim.fleeing, "Sta○ Beam scares the Italians it hits");
+                    yield return Shot("05c-special-" + id);
+                    yield return Real(2.5f);
+                    continue;
+                }
+                yield return Real(id == SpecialId.Bazooka ? 0.3f : 0.9f);
+                if (id == SpecialId.Bazooka || id == SpecialId.Sprinkler || id == SpecialId.Parmesan) yield return Shot("05c-special-" + id);
+            }
+            Controls.TestMouseWorld = null;
+
+            // Ketchup bombs go for the thickest crowd.
+            var crowd = new Vector3(-4f, 0f, -20f);
+            G.Player.transform.position = crowd + new Vector3(6f, 0f, 0f);
+            for (int i = 0; i < 7; i++) G.Enemies.Spawn(EnemyKind.Signore, crowd + new Vector3((i % 3 - 1) * 0.9f, 0f, (i / 3 - 1) * 0.9f), 50f);
+            G.Enemies.Spawn(EnemyKind.Signore, crowd + new Vector3(10f, 0f, 6f), 50f);
+            yield return null;
+            int onCrowd = 0;
+            for (int i = 0; i < 10; i++)
+            {
+                var pick = G.Enemies.DensestNear(G.Player.Position, 12f, 2.3f, 14, null);
+                if (pick != null && Vector3.Distance(pick.pos, crowd) < 3f) onCrowd++;
+            }
+            Check(onCrowd >= 8, $"Ketchup bombs target the densest crowd ({onCrowd}/10)");
+            circling = true;
+
+            autoDismiss = false;
+            for (int i = 0; i < 20 && game.State != GameState.Playing; i++) { Pick(0); yield return Real(0.3f); }
             G.Player.AddXp(G.Player.XpNeeded + 1);
             yield return Real(0.8f);
             Check(game.State == GameState.LevelUp && game.Menus.Nav.items.Count >= 3, "Level up offers at least three choices");
@@ -270,6 +368,7 @@ namespace PastaSurvivors
             yield return Real(1f);
             yield return Shot("10-nonna");
 
+            Check(G.Hazards.CarsDriven > 0, $"Traffic drives across the Roman road ({G.Hazards.CarsDriven} cars)");
             G.RunTime = G.Stage.duration * G.Waves.TimeScale - 0.5f;
             yield return Real(3f);
             Check(G.Waves.BossSpawned && G.Enemies.Boss != null, "Boss arrives at the end of the timer");
@@ -344,6 +443,8 @@ namespace PastaSurvivors
             if (G.Enemies.Boss != null) { G.Enemies.Boss.pos = G.Player.Position + Vector3.forward * 8f; }
             yield return Real(3f);
             Check(G.Enemies.Boss != null && G.Enemies.Boss.def.kind == EnemyKind.BossDon, "Napoli boss is Don Carbonara");
+            for (int i = 0; i < 40 && G.Hazards.BombsDropped == 0; i++) yield return Real(0.5f);
+            Check(G.Hazards.BombsDropped > 0, $"Vesuvius ash bombs fall in Napoli ({G.Hazards.BombsDropped})");
             yield return Shot("19-napoli-boss");
 
             // Game over flow.
@@ -365,6 +466,7 @@ namespace PastaSurvivors
             game.Resume();
             yield return Real(0.3f);
             Check(Time.timeScale == 1f, "Resume restores time");
+            circling = false;
             Controls.TestMove = null;
             game.GoTitle();
             yield return Real(1.5f);

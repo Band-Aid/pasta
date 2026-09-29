@@ -174,6 +174,13 @@ namespace PastaSurvivors
                 float gap = d.magnitude - o.r;
                 if (gap < 3f) flee += d.normalized * (3f - gap) * 0.6f;
             }
+            foreach (var w in G.Arena.walls)
+            {
+                float qx = Mathf.Clamp(pos.x, w.min.x, w.max.x), qz = Mathf.Clamp(pos.z, w.min.y, w.max.y);
+                var d = new Vector3(pos.x - qx, 0f, pos.z - qz);
+                float gap = d.magnitude;
+                if (gap < 2.5f && gap > 0.001f) flee += d / gap * (2.5f - gap) * 0.8f;
+            }
             float edge = Mathf.Min(Mathf.Min(pos.x - G.Arena.min.x, G.Arena.max.x - pos.x), Mathf.Min(pos.z - G.Arena.min.y, G.Arena.max.y - pos.z));
             // Head for the nearest pickup when it's calm-ish.
             Vector3 seek = Vector3.zero;
@@ -185,7 +192,7 @@ namespace PastaSurvivors
                 if (want < bestD) { bestD = want; seek = (pk.pos - pos).normalized; }
             }
             // Circle around the arena centre, away from walls.
-            Vector3 center = new Vector3((G.Arena.min.x + G.Arena.max.x) * 0.5f, 0f, (G.Arena.min.y + G.Arena.max.y) * 0.5f);
+            Vector3 center = G.Arena.spawn;
             Vector3 toC = center - pos; toC.y = 0f;
             Vector3 tangent = Vector3.Cross(Vector3.up, toC.normalized) * orbitSign;
             if (UnityEngine.Random.value < 0.001f) orbitSign = -orbitSign;
@@ -201,6 +208,11 @@ namespace PastaSurvivors
             finished = true;
             Sample();
             foreach (var kv in G.Player.DamageTaken) log.AppendLine($"  damage from {kv.Key}: {kv.Value:0}");
+            foreach (var w in G.Player.Weapons)
+            {
+                G.Game.DamageBySlot.TryGetValue(w.Slot, out var dealt);
+                log.AppendLine($"  dealt by {w.def.icon}{w.level}{(w.evolved ? "*" : "")}: {dealt:#,0}");
+            }
             log.AppendLine(cleared ? $"RESULT: CLEARED at {UiKit.Clock(G.RunTime)}" : $"RESULT: DIED at {UiKit.Clock(G.RunTime)}");
             File.WriteAllText(Path.Combine(output, $"bot-stage{stage + 1}-c{character}.txt"), log.ToString());
             SaveData.Wipe();

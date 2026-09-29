@@ -118,7 +118,7 @@ namespace PastaSurvivors
             }
             rec.Append($"通算撃退数  {SaveData.TotalKills}");
             UiKit.Label(c, "Records", rec.ToString(), 24, new Color(1f, 1f, 1f, 0.8f), TextAnchor.LowerLeft, new Vector2(0f, 0f), new Vector2(100, 70), new Vector2(700, 200), FontStyle.Normal, true, new Vector2(0f, 0f));
-            UiKit.Label(c, "Hint", "移動 WASD/左スティック   ダッシュ Space/Shift/A   主武器切替 Q・E/ホイール/LB・RB   視点切替 V/View   決定 Enter/A   戻る Esc/B",
+            UiKit.Label(c, "Hint", "移動 WASD/左クリック長押し/左スティック   ダッシュ Space/Shift/A   特殊武器 右クリック/F/Y   主武器切替 Q・E/ホイール/LB・RB   視点 V/View",
                 20, new Color(1f, 1f, 1f, 0.55f), TextAnchor.LowerRight, new Vector2(1f, 0f), new Vector2(-30, 20), new Vector2(1200, 30), FontStyle.Normal, true, new Vector2(1f, 0f));
         }
 
@@ -127,16 +127,16 @@ namespace PastaSurvivors
             var c = Begin("howto", 0.85f);
             UiKit.Label(c, "T", "遊び方", 64, UiKit.Gold, TextAnchor.MiddleCenter, new Vector2(0.5f, 1f), new Vector2(0, -110), new Vector2(1200, 90));
             string body =
-                "・移動するだけで、パスタ武器が自動で発動します。イタリア人は目の前でパスタを折られると耐えられず逃げ出します。\n\n" +
-                "・倒したイタリア人が落とす <color=#ffd060>パスタの欠片（経験値）</color> を集めてレベルアップ。3〜4択から武器やパッシブを選ぼう。\n\n" +
-                "・武器は最大6つ、パッシブも最大6つ。武器をLv8にして対応するパッシブを持った状態で <color=#ffd060>宝箱</color> を開けると <color=#ff9050>進化</color> します。\n\n" +
-                "・宝箱はノンナ（エリート）やボスが落とします。ワイン樽を壊すとピザ（回復）やコインが出ることも。\n\n" +
-                "・<color=#a0e0ff>ダッシュ</color>（Space / Shift / A）は短時間無敵。ベスパの突進やボスの攻撃予告（赤い範囲）を避けよう。\n\n" +
-                "・<color=#ffd060>主武器</color>（Q/E・ホイール・1〜6・LB/RB で切替）は威力1.4倍・クールダウン25%短縮に加えて武器ごとの特性が付く。スリッパ投げにはフジッリ、ボスにはペンネ、ピンチにはカルボナーラ…と状況で切り替えよう。\n\n" +
-                "・<color=#a0e0ff>一人称モード</color>（タイトル/ポーズで切替、プレイ中は V）では主武器がマウスで狙った方向へ飛ぶ。右下のレーダーで背後のイタリア人に注意。\n\n" +
-                "・10分生き延びるとボスが登場。倒せばステージクリア、次のステージが解放されます。\n\n" +
-                "・集めたコイン（€）はタイトルの「パワーアップ」で永続強化に使えます。";
-            UiKit.Label(c, "B", body, 30, UiKit.Cream, TextAnchor.UpperLeft, new Vector2(0.5f, 0.5f), new Vector2(0, 20), new Vector2(1300, 700), FontStyle.Normal);
+                "・移動するだけでパスタ武器が自動で発動。イタリア人は目の前でパスタを折られると逃げ出す。落とす<color=#ffd060>パスタの欠片</color>でレベルアップ。\n" +
+                "・<color=#ffd060>主武器</color>（Q/E・ホイール・1〜6・LB/RB）は威力1.4倍と固有の特性付き。状況で切り替えよう。\n" +
+                "・<color=#ffb060>特殊武器</color>はマップの<color=#ffb060>光の柱（台座）</color>で拾う。右クリック / F / Y で好きな時に使え、使うとクールダウン。持ち替えると元の武器は台座に残る。\n" +
+                "・<color=#a0e0ff>マウス</color>：左クリック長押しでカーソルへ移動、主武器と特殊武器はカーソルへ向けて撃つ。パッドは右スティックで狙う。\n" +
+                "・<color=#a0e0ff>地形を使おう</color>：壁・生垣・柱はスリッパなどの投擲を防ぐ。路地や橋に誘い込めば範囲攻撃が刺さる。\n" +
+                "　回復の泉（緑の輪）は立つとHP回復、市場（橙の輪）はワイン樽がよく出る。ローマの車道とナポリの火山弾はイタリア人も巻き込む。\n" +
+                "・武器をLv8にして対応するパッシブを持った状態で宝箱を開けると進化。宝箱はノンナとボスが落とす。\n" +
+                "・ダッシュ（Space/Shift/A）は短時間無敵。10分生き延びるとボス。集めたコインでパワーアップ。\n" +
+                "・V（View）で見下ろし/一人称を切り替え。";
+            UiKit.Label(c, "B", body, 27, UiKit.Cream, TextAnchor.UpperLeft, new Vector2(0.5f, 0.5f), new Vector2(0, 10), new Vector2(1500, 760), FontStyle.Normal);
             Button(c, "戻る", new Vector2(0.5f, 0f), new Vector2(0, 90), new Vector2(360, 70), () => ShowTitle());
             Nav.onCancel = () => ShowTitle();
         }

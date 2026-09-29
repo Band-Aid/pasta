@@ -18,7 +18,8 @@ namespace PastaSurvivors
         private Transform viewRoot, viewAnchor, viewHandL, viewHandR;
         private readonly List<Renderer> viewRenderers = new List<Renderer>();
         private PastaVisual bundle;
-        private GameObject heldItem;
+        private GameObject heldItem, beamCup;
+        private bool beaming;
         private WeaponId? shownMain;
         private bool shownFirstPerson, firstPerson;
         private float phase, throwT, slamT, snapT, respawnT, switchT;
@@ -122,6 +123,8 @@ namespace PastaSurvivors
 
         private void ClearHeld()
         {
+            if (beamCup != null) { Destroy(beamCup); beamCup = null; }
+            beaming = false;
             if (heldItem != null)
             {
                 viewRenderers.Remove(heldItem.GetComponent<Renderer>());
@@ -161,6 +164,24 @@ namespace PastaSurvivors
         }
 
         public void Throw() => throwT = 0.28f;
+
+        /// <summary>Hold the giant parody frappé out in front while the Sta○ Beam fires.</summary>
+        public void SetBeaming(bool on)
+        {
+            beaming = on;
+            if (on)
+            {
+                if (beamCup == null) beamCup = Models.Static(Models.Get("special_StarBeam"), Anchor, "Frappe", Mats.Lit, !firstPerson);
+                beamCup.transform.SetParent(Anchor, false);
+                beamCup.transform.localPosition = firstPerson ? new Vector3(0.05f, 0f, 0.1f) : new Vector3(0f, 0f, 0.1f);
+                beamCup.transform.localRotation = Quaternion.Euler(70f, 0f, 0f);
+                beamCup.transform.localScale = Vector3.one * (firstPerson ? 0.55f : 0.9f);
+                beamCup.SetActive(true);
+            }
+            else if (beamCup != null) beamCup.SetActive(false);
+            if (heldItem != null) heldItem.SetActive(!on);
+            if (bundle != null) bundle.gameObject.SetActive(!on);
+        }
         public void Slam() => slamT = 0.4f;
         public void OnSwitch() => switchT = 0.25f;
 
@@ -192,7 +213,7 @@ namespace PastaSurvivors
 
             float armL = rig.armRest + s * 6f * amp, armR = rig.armRest - s * 6f * amp;
             float zL = -6f, zR = 6f;
-            float bendK = 0f, recoil = 0f;
+            float bendK = 0f;
 
             // Snap: bend the bundle, then break it.
             if (snapT > 0f)
@@ -209,7 +230,6 @@ namespace PastaSurvivors
                     Destroy(bundle.gameObject, 0.05f);
                     bundle = null;
                     respawnT = 0.3f;
-                    recoil = 1f;
                 }
             }
             else if (bundle == null && respawnT > 0f)
@@ -245,6 +265,7 @@ namespace PastaSurvivors
             }
             else if (lasagna.gameObject.activeSelf) lasagna.gameObject.SetActive(false);
 
+            if (beaming) { armL = armR = -88f; zL = -18f; zR = 18f; }
             rig.armL.localRotation = Quaternion.Euler(armL, 0f, zL);
             rig.armR.localRotation = Quaternion.Euler(armR, 0f, zR);
 

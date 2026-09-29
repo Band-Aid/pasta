@@ -28,7 +28,8 @@ namespace PastaSurvivors
         private readonly Dictionary<string, Mesh> meshes = new Dictionary<string, Mesh>();
         private MaterialPropertyBlock mpb;
         private Transform root;
-        private GameObject aura;
+        private GameObject aura, reticle, beamOuter, beamCore;
+        private MaterialPropertyBlock beamBlock;
         private MeshRenderer auraRenderer;
         private float pokiCooldown;
 
@@ -44,6 +45,54 @@ namespace PastaSurvivors
             aura = Models.Static(Mesh("disc"), root, "Aura", Mats.FxAlpha, false);
             auraRenderer = aura.GetComponent<MeshRenderer>();
             aura.SetActive(false);
+            reticle = Models.Static(MeshKit.Sector(0.55f, 0.75f, 360f, 32, "Reticle"), root, "Reticle", Mats.FxAdd, false);
+            var rb = new MaterialPropertyBlock();
+            rb.SetColor("_BaseColor", new Color(1f, 0.9f, 0.5f, 0.9f));
+            reticle.GetComponent<MeshRenderer>().SetPropertyBlock(rb);
+            reticle.SetActive(false);
+            // Sta○ Beam: a green shell around a white core, stretched along Z.
+            var beamMesh = new MeshKit().Cyl(new Vector3(0f, 0f, 0.5f), Vector3.one, Color.white, new Vector3(90, 0, 0), 14).ToMesh("Beam");
+            beamOuter = Models.Static(beamMesh, root, "Beam outer", Mats.FxAdd, false);
+            beamCore = Models.Static(beamMesh, root, "Beam core", Mats.FxAdd, false);
+            beamBlock = new MaterialPropertyBlock();
+            beamOuter.SetActive(false);
+            beamCore.SetActive(false);
+        }
+
+        public void Beam(Vector3 origin, Vector3 dir, float length, bool on)
+        {
+            if (!on || length <= 0f)
+            {
+                beamOuter.SetActive(false);
+                beamCore.SetActive(false);
+                return;
+            }
+            beamOuter.SetActive(true);
+            beamCore.SetActive(true);
+            var rot = Quaternion.LookRotation(dir);
+            float t = Time.time;
+            float wobble = 1f + Mathf.Sin(t * 40f) * 0.08f;
+            beamOuter.transform.SetPositionAndRotation(origin, rot);
+            beamOuter.transform.localScale = new Vector3(1.7f * wobble, 1.7f * wobble, length);
+            beamCore.transform.SetPositionAndRotation(origin, rot);
+            beamCore.transform.localScale = new Vector3(0.6f, 0.6f, length);
+            beamBlock.SetColor("_BaseColor", new Color(0.05f, 0.65f, 0.35f, 0.55f));
+            beamOuter.GetComponent<MeshRenderer>().SetPropertyBlock(beamBlock);
+            beamBlock.SetColor("_BaseColor", new Color(1f, 1f, 0.95f, 0.9f));
+            beamCore.GetComponent<MeshRenderer>().SetPropertyBlock(beamBlock);
+            // Whipped cream and coffee spray where the beam lands.
+            var end = origin + dir * length;
+            if (Random.value < 0.6f) Burst(end, new Color(1f, 0.98f, 0.92f, 0.8f), 1, 2f, 0.7f, FxKind.Puff);
+            if (Random.value < 0.6f) Burst(end, new Color(0.45f, 0.28f, 0.15f), 2, 5f, 0.12f, FxKind.Crumb);
+            if (Random.value < 0.35f) Burst(origin + dir * Random.Range(0f, length), new Color(0.6f, 1f, 0.7f, 0.9f), 1, 1f, 0.3f, FxKind.Spark);
+        }
+
+        /// <summary>Ground marker under the mouse cursor in the top-down view.</summary>
+        public void Reticle(Vector3 pos, bool show)
+        {
+            if (reticle.activeSelf != show) reticle.SetActive(show);
+            if (!show) return;
+            reticle.transform.SetPositionAndRotation(new Vector3(pos.x, 0.08f, pos.z), Quaternion.Euler(0f, Time.unscaledTime * 90f, 0f));
         }
 
         private ParticleSystem MakeSystem(string name, Material mat, Mesh mesh, float gravity)
@@ -116,6 +165,9 @@ namespace PastaSurvivors
             foreach (var f in active) { f.go.SetActive(false); pools[f.key].Push(f); }
             active.Clear();
             aura.SetActive(false);
+            reticle.SetActive(false);
+            beamOuter.SetActive(false);
+            beamCore.SetActive(false);
         }
 
         // ---------------- flat shapes ----------------

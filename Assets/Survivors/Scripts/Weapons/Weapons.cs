@@ -49,11 +49,11 @@ namespace PastaSurvivors
 
         public const float MainDamage = 1.4f, MainCooldown = 0.75f, MainArea = 1.15f;
         public bool IsMain => P != null && P.Main == this;
-        /// <summary>The main weapon fires where the player looks in first person.</summary>
-        protected bool Aimed => IsMain && P.FirstPerson;
+        /// <summary>The main weapon fires where the player aims (crosshair, mouse cursor or right stick).</summary>
+        protected bool Aimed => IsMain && P.HasAim;
 
         protected float Dmg(WStats s) => s.damage * P.Might * (IsMain ? MainDamage : 1f);
-        protected float Cd(WStats s) => Mathf.Max(0.08f, s.cooldown * P.CooldownMul * (IsMain ? MainCooldown : 1f));
+        protected float Cd(WStats s) => Mathf.Max(0.06f, s.cooldown * P.CooldownMul * P.BuffCdMul * (IsMain ? MainCooldown : 1f));
         protected float Area(WStats s) => s.area * P.AreaMul * (IsMain ? MainArea : 1f);
         protected int Amount(WStats s) => s.amount + P.AmountBonus + (IsMain && MainAddsAmount ? 1 : 0);
         protected virtual bool MainAddsAmount => false;
@@ -85,7 +85,7 @@ namespace PastaSurvivors
 
         protected Vector3 AimAtNearest(float range, out Enemy target)
         {
-            target = G.Enemies.Nearest(P.Position, range);
+            target = G.Enemies.Nearest(P.Position, range, -1, true);
             if (target == null) return P.Facing;
             var d = target.pos - P.Position; d.y = 0f;
             return d.sqrMagnitude > 0.001f ? d.normalized : P.Facing;
@@ -101,7 +101,7 @@ namespace PastaSurvivors
             int n = Amount(s);
             // Snap toward the closest Italian in reach, otherwise where we're heading.
             Vector3 f = P.Facing;
-            var target = Aimed ? null : G.Enemies.Nearest(P.Position, 4.2f * Area(s) + 2.5f);
+            var target = Aimed ? null : G.Enemies.Nearest(P.Position, 4.2f * Area(s) + 2.5f, -1, true);
             if (Aimed) f = P.AimDir;
             else if (target != null)
             {
@@ -147,13 +147,13 @@ namespace PastaSurvivors
         private readonly List<Enemy> targets = new List<Enemy>();
         private int cycle;
 
-        protected override float NextDelay(WStats s) => evolved ? Mathf.Max(0.06f, 0.13f * P.CooldownMul * (IsMain ? MainCooldown : 1f)) : Cd(s);
+        protected override float NextDelay(WStats s) => evolved ? Mathf.Max(0.05f, 0.13f * P.CooldownMul * P.BuffCdMul * (IsMain ? MainCooldown : 1f)) : Cd(s);
         protected override bool MainAddsAmount => true;
 
         protected override void Fire(WStats s)
         {
             int n = evolved ? 1 : Amount(s);
-            int found = G.Enemies.NearestSeveral(P.Position, 20f, evolved ? Mathf.Max(1, Amount(s)) : n, targets);
+            int found = G.Enemies.NearestSeveral(P.Position, 20f, evolved ? Mathf.Max(1, Amount(s)) : n, targets, true);
             for (int k = 0; k < n; k++)
             {
                 Enemy t = found > 0 && !Aimed ? targets[(k + cycle) % found] : null;
@@ -332,12 +332,16 @@ namespace PastaSurvivors
 
     public class KetchupBomb : Weapon
     {
+        private readonly List<Vector3> volley = new List<Vector3>();
+
         protected override void Fire(WStats s)
         {
             int n = Amount(s);
+            volley.Clear();
             for (int k = 0; k < n; k++)
             {
-                var t = Aimed ? null : G.Enemies.RandomNear(P.Position, 11f);
+                // Aim for the thickest crowd, spreading multiple bottles over different crowds.
+                var t = Aimed ? null : G.Enemies.DensestNear(P.Position, 12f, 2.3f * Area(s), 14, volley);
                 Vector3 target;
                 if (Aimed)
                 {
@@ -346,6 +350,7 @@ namespace PastaSurvivors
                 }
                 else target = t != null ? t.pos : P.Position + Quaternion.Euler(0, Random.value * 360f, 0) * Vector3.forward * Random.Range(3f, 7f);
                 target = G.Arena.Clamp(target, 1f);
+                volley.Add(target);
                 float delay = k * 0.12f;
                 if (delay <= 0f) Lob(s, target);
                 else Later(delay, () => Lob(Raw, target));
@@ -358,12 +363,23 @@ namespace PastaSurvivors
             var shot = G.Shots.Fire(ShotKind.Ketchup, Motion.Lob, P.Position + Vector3.up * 1.4f, Vector3.zero, 0f, 0.3f, 0.55f, Slot);
             shot.target = target;
             shot.spinRate = 900f;
-            float area = Area(s), dmg = Dmg(s), dur = Dur(s);
+            float area = Area(s), dmg = Dmg(s), dur = Dur(s), kb = s.knockback;
             bool evo = evolved, sticky = IsMain;
+            int slot = Slot;
             shot.onEnd = x =>
             {
-                var zone = G.Shots.Zone(x.target, 1.9f * area, dmg, dur, 0.4f, Slot, new Color(0.85f, 0.08f, 0.05f, 0.6f), 1f);
-                zone.orbitSpeed = evo ? 2.2f : 0f;
+                float radius = 2.3f * area;
+                // The bottle bursts: a burning splash on impact, then the puddle keeps cooking.
+                int hit = G.Enemies.Query(x.target, radius, hits);
+                for (int i = 0; i < hit; i++)
+                {
+                    var e = hits[i];
+                    G.Enemies.Damage(e, dmg * 2f, e.pos - x.target, kb, slot);
+                    e.slow = Mathf.Max(e.slow, 1f);
+                }
+                G.Fx.Ring(x.target + Vector3.up * 0.1f, radius, new Color(1f, 0.25f, 0.1f, 0.8f), 0.3f, 0.5f);
+                var zone = G.Shots.Zone(x.target, radius, dmg, dur, 0.35f, slot, new Color(0.85f, 0.08f, 0.05f, 0.6f), 1f);
+                zone.orbitSpeed = evo ? 1.8f : 0f;
                 zone.sticky = sticky;
                 G.Fx.Burst(x.target + Vector3.up * 0.2f, new Color(0.9f, 0.1f, 0.05f), 12, 5f, 0.18f, FxKind.Crumb);
                 G.Sfx.Play(SfxId.Splat, 0.45f, Random.Range(0.9f, 1.1f));

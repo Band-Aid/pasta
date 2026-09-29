@@ -17,6 +17,7 @@ namespace PastaSurvivors
         public static Arena Arena;
         public static CameraRig Cam;
         public static WaveDirector Waves;
+        public static Hazards Hazards;
         public static Hud Hud;
         public static StageDef Stage;
         public static float RunTime;
@@ -187,8 +188,44 @@ namespace PastaSurvivors
             return -1;
         }
 
+        public static bool TestToggleView, TestSpecial;
+        /// <summary>Scripted mouse for verification: ground point to aim at, and whether the move button is held.</summary>
+        public static Vector3? TestMouseWorld;
+        public static bool TestMouseHeld;
+
+        /// <summary>Special weapon: right click, F, gamepad Y or left trigger.</summary>
+        public static bool Special()
+        {
+            if (TestSpecial) { TestSpecial = false; return true; }
+            if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame) return true;
+            var kb = Keyboard.current;
+            if (kb != null && kb.fKey.wasPressedThisFrame) return true;
+            foreach (var pad in Gamepad.all)
+                if (pad.buttonNorth.wasPressedThisFrame || pad.leftTrigger.wasPressedThisFrame) return true;
+            return false;
+        }
+
+        public static bool MouseMoveHeld => TestMouseHeld || (Mouse.current != null && Mouse.current.leftButton.isPressed);
+        public static bool MouseAnyButton => Mouse.current != null && (Mouse.current.leftButton.isPressed || Mouse.current.rightButton.isPressed);
+
+        /// <summary>Twin-stick aim (top-down).</summary>
+        public static Vector2 AimStick()
+        {
+            Vector2 v = Vector2.zero;
+            foreach (var pad in Gamepad.all)
+            {
+                var s = pad.rightStick.ReadValue();
+                if (s.sqrMagnitude > v.sqrMagnitude) v = s;
+            }
+            return v.magnitude > 0.35f ? v : Vector2.zero;
+        }
+
+        /// <summary>True if only keyboard/gamepad movement is present (mouse movement uses its own path).</summary>
+        public static bool HasStickOrKeys(Vector2 move) => move.sqrMagnitude > 0.01f;
+
         public static bool ToggleView()
         {
+            if (TestToggleView) { TestToggleView = false; return true; }
             var kb = Keyboard.current;
             if (kb != null && kb.vKey.wasPressedThisFrame) return true;
             foreach (var pad in Gamepad.all) if (pad.selectButton.wasPressedThisFrame) return true;
@@ -259,53 +296,4 @@ namespace PastaSurvivors
         public static int ShopCost(int index) => GameData.Shop[index].baseCost * (Shop[index] + 1);
     }
 
-    /// <summary>Playable area: an axis-aligned rectangle with circular obstacles. No physics engine involved.</summary>
-    public class Arena
-    {
-        public struct Obstacle { public Vector2 c; public float r; }
-        public Vector2 min, max;
-        public readonly List<Obstacle> obstacles = new List<Obstacle>();
-
-        public Arena(Vector2 min, Vector2 max) { this.min = min; this.max = max; }
-
-        public void AddObstacle(Vector3 pos, float radius) => obstacles.Add(new Obstacle { c = new Vector2(pos.x, pos.z), r = radius });
-
-        public bool Inside(Vector3 p, float margin)
-            => p.x > min.x + margin && p.x < max.x - margin && p.z > min.y + margin && p.z < max.y - margin;
-
-        public Vector3 Clamp(Vector3 p, float margin)
-        {
-            p.x = Mathf.Clamp(p.x, min.x + margin, max.x - margin);
-            p.z = Mathf.Clamp(p.z, min.y + margin, max.y - margin);
-            return p;
-        }
-
-        public bool Blocked(Vector3 p, float r)
-        {
-            foreach (var o in obstacles)
-            {
-                float dx = p.x - o.c.x, dz = p.z - o.c.y, rr = o.r + r;
-                if (dx * dx + dz * dz < rr * rr) return true;
-            }
-            return false;
-        }
-
-        /// <summary>Push a circle out of obstacles and inside the bounds.</summary>
-        public Vector3 Resolve(Vector3 p, float r)
-        {
-            for (int i = 0; i < obstacles.Count; i++)
-            {
-                var o = obstacles[i];
-                float dx = p.x - o.c.x, dz = p.z - o.c.y, rr = o.r + r;
-                float d2 = dx * dx + dz * dz;
-                if (d2 >= rr * rr) continue;
-                float d = Mathf.Sqrt(d2);
-                if (d < 0.0001f) { dx = 1f; dz = 0f; d = 1f; }
-                float push = rr - d;
-                p.x += dx / d * push;
-                p.z += dz / d * push;
-            }
-            return Clamp(p, r);
-        }
-    }
 }

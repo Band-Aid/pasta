@@ -558,6 +558,20 @@ namespace PastaSurvivors
                     kit.Ball(Vector3.zero, 0.42f, new Color(0.45f, 0.24f, 0.14f));
                     kit.Ball(new Vector3(0, 0.12f, 0), new Vector3(0.3f, 0.2f, 0.3f), Tomato);
                     break;
+                case ShotKind.Bazooka:
+                    for (int i = 0; i < 16; i++)
+                        kit.Cyl(new Vector3((i % 4 - 1.5f) * 0.07f, (i / 4 - 1.5f) * 0.07f, 0f), new Vector3(0.06f, 1.1f, 0.06f), i % 3 == 0 ? PastaGold * 0.9f : PastaGold, new Vector3(90, 0, 0), 6);
+                    kit.Cyl(new Vector3(0, 0, 0.2f), new Vector3(0.34f, 0.12f, 0.34f), Tomato, new Vector3(90, 0, 0), 10);
+                    kit.Cyl(new Vector3(0, 0, -0.25f), new Vector3(0.34f, 0.12f, 0.34f), Tomato, new Vector3(90, 0, 0), 10);
+                    break;
+                case ShotKind.Drop:
+                    kit.Ball(Vector3.zero, 0.26f, Tomato);
+                    break;
+                case ShotKind.Parmesan:
+                    kit.Cyl(Vector3.zero, new Vector3(0.26f, 0.4f, 0.26f), new Color(0.2f, 0.55f, 0.3f), default, 10);
+                    kit.Cyl(new Vector3(0, 0.22f, 0), new Vector3(0.27f, 0.06f, 0.27f), new Color(1f, 0.85f, 0.3f), default, 10);
+                    kit.Box(new Vector3(0, 0.02f, 0.13f), new Vector3(0.18f, 0.16f, 0.02f), Color.white);
+                    break;
                 case ShotKind.Pineapple:
                     kit.Box(Vector3.zero, new Vector3(0.22f, 0.16f, 0.22f), new Color(1f, 0.85f, 0.1f), new Vector3(0, 45, 0));
                     break;
@@ -633,6 +647,64 @@ namespace PastaSurvivors
                     kit.Ball(new Vector3(0.05f, 0.16f, 0f), new Vector3(0.28f, 0.14f, 0.26f), new Color(1f, 0.98f, 0.9f));
                     kit.Box(new Vector3(-0.12f, 0.14f, 0.1f), new Vector3(0.06f, 0.04f, 0.06f), new Color(0.7f, 0.3f, 0.25f));
                     break;
+                case "car":
+                    CarGeometry(kit, Matrix4x4.identity, new Color(0.85f, 0.18f, 0.15f));
+                    break;
+                case "sprinkler":
+                    kit.Cyl(new Vector3(0, 0.1f, 0), new Vector3(0.9f, 0.2f, 0.9f), new Color(0.3f, 0.3f, 0.32f), default, 12);
+                    kit.Cyl(new Vector3(0, 0.55f, 0), new Vector3(0.45f, 0.8f, 0.45f), Tomato, default, 12);
+                    kit.Cone(new Vector3(0, 1.05f, 0), new Vector3(0.45f, 0.25f, 0.45f), Tomato, default, 0.3f, 12);
+                    kit.Cyl(new Vector3(0, 1.22f, 0), new Vector3(0.14f, 0.1f, 0.14f), Color.white, default, 8);
+                    kit.Box(new Vector3(0, 0.6f, 0.23f), new Vector3(0.3f, 0.25f, 0.02f), Color.white);
+                    for (int i = 0; i < 4; i++) kit.Box(Quaternion.Euler(0, i * 90, 0) * new Vector3(0, 1.25f, 0.2f), new Vector3(0.06f, 0.06f, 0.3f), new Color(0.75f, 0.75f, 0.78f), new Vector3(0, i * 90, 0));
+                    break;
+                case "special_Bazooka":
+                    kit.Frame = Matrix4x4.Rotate(Quaternion.Euler(0, 0, 25));
+                    kit.Add(SubKit(Shot(ShotKind.Bazooka)), Matrix4x4.Scale(Vector3.one * 1.2f));
+                    kit.Frame = Matrix4x4.identity;
+                    break;
+                case "special_KnifeDash":
+                    kit.Box(new Vector3(0, 0.3f, 0), new Vector3(0.12f, 0.7f, 0.03f), new Color(0.85f, 0.87f, 0.9f), new Vector3(0, 0, 20));
+                    kit.Box(new Vector3(-0.1f, -0.15f, 0), new Vector3(0.1f, 0.3f, 0.08f), new Color(0.3f, 0.2f, 0.12f), new Vector3(0, 0, 20));
+                    kit.Box(new Vector3(0.12f, 0.1f, 0.1f), new Vector3(0.6f, 0.05f, 0.05f), PastaGold, new Vector3(0, 0, -30));
+                    break;
+                case "special_Parmesan":
+                    kit.Add(SubKit(Shot(ShotKind.Parmesan)), Matrix4x4.Scale(Vector3.one * 1.6f));
+                    break;
+                case "special_Sprinkler":
+                    kit.Add(SubKit(Get("sprinkler")), Matrix4x4.Scale(Vector3.one * 0.6f) * Matrix4x4.Translate(new Vector3(0, -0.6f, 0)));
+                    break;
+                case "special_SugarEspresso":
+                    kit.Cyl(new Vector3(0, 0, 0), new Vector3(0.35f, 0.3f, 0.35f), Color.white, default, 12);
+                    kit.Cyl(new Vector3(0, 0.14f, 0), new Vector3(0.3f, 0.04f, 0.3f), new Color(0.3f, 0.18f, 0.1f), default, 12);
+                    kit.Cyl(new Vector3(0, -0.16f, 0), new Vector3(0.6f, 0.04f, 0.6f), Color.white, default, 14);
+                    for (int i = 0; i < 5; i++) kit.Box(new Vector3(-0.3f + i * 0.15f, 0.3f + (i % 2) * 0.1f, 0.1f), Vector3.one * 0.1f, Color.white, new Vector3(20 * i, 10 * i, 0));
+                    break;
+                case "special_StarBeam":
+                    {
+                        // A parody frappé: clear cup, green band with a white star emblem, whipped cream dome, green straw.
+                        var green = new Color(0f, 0.45f, 0.26f);
+                        kit.Cone(new Vector3(0f, 0f, 0f), new Vector3(0.34f, 0.7f, 0.34f), new Color(0.8f, 0.62f, 0.45f), default, 1.3f, 14);
+                        kit.Cyl(new Vector3(0f, 0.02f, 0f), new Vector3(0.4f, 0.16f, 0.4f), green, default, 14);
+                        kit.Cyl(new Vector3(0f, 0.02f, 0.2f), new Vector3(0.15f, 0.02f, 0.15f), Color.white, new Vector3(90, 0, 0), 12);
+                        for (int i = 0; i < 5; i++)
+                            kit.Box(new Vector3(0f, 0.02f, 0.215f) + Quaternion.Euler(0, 0, i * 72f) * new Vector3(0f, 0.035f, 0f), new Vector3(0.025f, 0.06f, 0.01f), green, new Vector3(0, 0, i * 72f));
+                        kit.Ball(new Vector3(0f, 0.4f, 0f), new Vector3(0.46f, 0.28f, 0.46f), new Color(1f, 0.98f, 0.93f));
+                        for (int i = 0; i < 4; i++)
+                            kit.Box(new Vector3(0f, 0.5f, -0.12f + i * 0.08f), new Vector3(0.3f, 0.02f, 0.02f), new Color(0.75f, 0.45f, 0.15f));
+                        kit.Bar(new Vector3(0.05f, 0.3f, 0f), new Vector3(0.14f, 0.85f, 0f), 0.04f, new Color(0.1f, 0.6f, 0.3f));
+                        break;
+                    }
+                case "pedestal":
+                    kit.Cyl(new Vector3(0, 0.15f, 0), new Vector3(1.8f, 0.3f, 1.8f), new Color(0.78f, 0.74f, 0.66f), default, 16);
+                    kit.Cyl(new Vector3(0, 0.34f, 0), new Vector3(1.4f, 0.1f, 1.4f), new Color(1f, 0.82f, 0.3f), default, 16);
+                    break;
+                case "beam":
+                    kit.Cyl(new Vector3(0, 6f, 0), new Vector3(0.9f, 12f, 0.9f), Color.white, default, 12);
+                    break;
+                case "arrow":
+                    kit.Cone(Vector3.zero, new Vector3(0.6f, 0.05f, 0.9f), Color.white, new Vector3(90, 0, 0), 0f, 3);
+                    break;
                 case "pasta_bundle":
                     for (int i = 0; i < 12; i++)
                         kit.Cyl(new Vector3((i % 4 - 1.5f) * 0.02f, (i / 4 - 1f) * 0.02f, 0), new Vector3(0.015f, 0.9f, 0.015f), PastaGold, new Vector3(0, 0, 90), 5);
@@ -655,6 +727,35 @@ namespace PastaSurvivors
             mesh = kit.ToMesh(key);
             misc[key] = mesh;
             return mesh;
+        }
+
+        /// <summary>Copies a finished mesh back into a kit so it can be re-transformed.</summary>
+        private static MeshKit SubKit(Mesh mesh)
+        {
+            var sub = new MeshKit();
+            var v = mesh.vertices; var n = mesh.normals; var uv = mesh.uv; var t = mesh.triangles; var c = mesh.colors;
+            sub.RawLinear(v, n, uv, t, c);
+            return sub;
+        }
+
+        /// <summary>A small Italian city car (think Fiat 500).</summary>
+        public static void CarGeometry(MeshKit k, Matrix4x4 frame, Color body)
+        {
+            var old = k.Frame;
+            k.Frame = frame;
+            k.Box(new Vector3(0, 0.55f, 0), new Vector3(1.5f, 0.6f, 3f), body);
+            k.Ball(new Vector3(0, 0.95f, -0.15f), new Vector3(1.4f, 0.9f, 1.9f), body);
+            k.Box(new Vector3(0, 1.05f, 0.62f), new Vector3(1.2f, 0.4f, 0.05f), new Color(0.2f, 0.3f, 0.38f), new Vector3(-30, 0, 0));
+            k.Box(new Vector3(0, 1.05f, -0.95f), new Vector3(1.2f, 0.36f, 0.05f), new Color(0.2f, 0.3f, 0.38f), new Vector3(30, 0, 0));
+            k.Box(new Vector3(0.71f, 1f, -0.15f), new Vector3(0.05f, 0.35f, 1.2f), new Color(0.2f, 0.3f, 0.38f));
+            k.Box(new Vector3(-0.71f, 1f, -0.15f), new Vector3(0.05f, 0.35f, 1.2f), new Color(0.2f, 0.3f, 0.38f));
+            foreach (var w in new[] { new Vector3(0.65f, 0.3f, 1f), new Vector3(-0.65f, 0.3f, 1f), new Vector3(0.65f, 0.3f, -1f), new Vector3(-0.65f, 0.3f, -1f) })
+                k.Cyl(w, new Vector3(0.6f, 0.25f, 0.6f), new Color(0.1f, 0.1f, 0.1f), new Vector3(0, 0, 90), 10);
+            k.Ball(new Vector3(0.45f, 0.65f, 1.5f), new Vector3(0.25f, 0.25f, 0.1f), new Color(1f, 0.95f, 0.75f));
+            k.Ball(new Vector3(-0.45f, 0.65f, 1.5f), new Vector3(0.25f, 0.25f, 0.1f), new Color(1f, 0.95f, 0.75f));
+            k.Box(new Vector3(0, 0.45f, 1.52f), new Vector3(1.4f, 0.12f, 0.08f), new Color(0.8f, 0.8f, 0.82f));
+            k.Box(new Vector3(0, 0.45f, -1.52f), new Vector3(1.4f, 0.12f, 0.08f), new Color(0.8f, 0.8f, 0.82f));
+            k.Frame = old;
         }
 
         private static void Gem(Color c, float size)

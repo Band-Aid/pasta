@@ -183,6 +183,53 @@ namespace PastaSurvivors
                     Tri(new Vector2(4.5f, 17), new Vector2(27.5f, 17), new Vector2(16, 4), Rd);
                     Circle(10, 21, 2, Wt);
                     break;
+                case "bazooka":
+                    for (int i = 0; i < 4; i++) Line(4 + i * 1.6f, 10 + i * 1.6f, 22 + i * 1.6f, 28 - i * 0.2f + i * 1.4f - 6, 1.1f, i % 2 == 0 ? Y : YL);
+                    Rect(10, 13, 14, 20, Rd);
+                    Circle(26, 23, 4, Or); Circle(27, 24, 2.2f, YL);
+                    Spark(25, 22, Wt);
+                    break;
+                case "knife":
+                    Tri(new Vector2(6, 26), new Vector2(10, 29), new Vector2(22, 12), Gy);
+                    Line(9, 27, 21, 13, 0.6f, Wt);
+                    Line(22, 12, 27, 6, 2.2f, Br);
+                    Line(4, 12, 28, 18, 1.1f, Y);
+                    Line(14, 15, 16, 14, 0.9f, Wt);
+                    break;
+                case "parmesan":
+                    Rect(10, 4, 22, 22, new Color(0.2f, 0.55f, 0.3f));
+                    Rect(10, 22, 22, 25, Y);
+                    Rect(12, 9, 20, 16, Wt);
+                    for (int i = 0; i < 6; i++) Circle(6 + i * 4, 28 - (i % 2) * 2, 1.4f, YL);
+                    break;
+                case "sprinkler":
+                    Rect(12, 4, 20, 7, GyD);
+                    Rect(13, 7, 19, 20, Rd);
+                    Rect(14, 20, 18, 23, Wt);
+                    for (int i = 0; i < 6; i++)
+                    {
+                        float a = i * 60f * Mathf.Deg2Rad;
+                        Circle(16 + Mathf.Cos(a) * 11f, 22 + Mathf.Sin(a) * 6f, 1.6f, Rd);
+                    }
+                    break;
+                case "sugar":
+                    Rect(9, 5, 21, 15, Wt);
+                    Ring(22, 10, 3.5f, 1.2f, Wt);
+                    Ellipse(15, 15, 6, 1.6f, BrD);
+                    Rect(6, 20, 11, 25, Wt); Rect(13, 22, 18, 27, Wt); Rect(20, 19, 25, 24, Wt);
+                    Line(25, 6, 29, 14, 1f, Y); Line(29, 14, 26, 14, 1f, Y); Line(26, 14, 30, 22, 1f, Y);
+                    break;
+                case "starbeam":
+                    Circle(16, 16, 14, new Color(0f, 0.5f, 0.28f));
+                    Ring(16, 16, 11, 1.1f, Wt);
+                    Tri(new Vector2(16, 26), new Vector2(11, 8), new Vector2(24, 18), Wt);
+                    Tri(new Vector2(16, 26), new Vector2(21, 8), new Vector2(8, 18), Wt);
+                    Tri(new Vector2(8, 18), new Vector2(24, 18), new Vector2(16, 12), Wt);
+                    break;
+                case "arrow":
+                    Tri(new Vector2(16, 30), new Vector2(4, 8), new Vector2(28, 8), UiKit.Gold);
+                    Tri(new Vector2(16, 24), new Vector2(9, 11), new Vector2(23, 11), YL);
+                    break;
                 case "gold":
                     Circle(16, 16, 12, Y); Spark(16, 16, Wt);
                     break;

@@ -41,7 +41,17 @@ namespace PastaSurvivors
 
     public enum Behavior { Chase, Thrower, Charger, Sweeper, Elite, Boss, Prop }
     public enum EnemyKind { Signore, Tifoso, Mamma, Chef, Vespista, Gondoliere, Pizzaiolo, Mafioso, Nonna, BossNonna, BossCapitano, BossDon, Barrel }
-    public enum ShotKind { Penne, Fusilli, Farfalle, Ketchup, Pizza, Slipper, Dough, Meatball, Pineapple, Oar }
+    public enum ShotKind { Penne, Fusilli, Farfalle, Ketchup, Pizza, Slipper, Dough, Meatball, Pineapple, Oar, Bazooka, Drop, Parmesan }
+
+    /// <summary>Special weapons: picked up on the map, fired manually, then cool down.</summary>
+    public enum SpecialId { Bazooka, KnifeDash, Parmesan, Sprinkler, SugarEspresso, StarBeam }
+
+    public class SpecialDef
+    {
+        public SpecialId id;
+        public string name, desc, icon;
+        public float cooldown;
+    }
 
     public class EnemyDef
     {
@@ -110,6 +120,8 @@ namespace PastaSurvivors
         public static readonly StageDef[] Stages;
         public static readonly CharacterDef[] Characters;
         public static readonly ShopDef[] Shop;
+        public static readonly SpecialDef[] Specials;
+        public static SpecialDef Special(SpecialId id) => Specials[(int)id];
 
         public static WeaponDef Weapon(WeaponId id) => Weapons[(int)id];
         public static PassiveDef Passive(PassiveId id) => Passives[(int)id];
@@ -192,13 +204,13 @@ namespace PastaSurvivors
                 new WeaponDef
                 {
                     id = WeaponId.KetchupBomb, mainTrait = "主武器：踏んだ敵がベタベタで動けない（足止め）", name = "ケチャップ爆弾", icon = "ketchup", evoIcon = "flood",
-                    desc = "パスタにケチャップ!? 投げたボトルが割れて、踏んだイタリア人を焼き、足止めする。",
+                    desc = "パスタにケチャップ!? 敵の密集地にボトルを投げつける。割れた瞬間に周囲を焼き、水たまりが足止めしながら焼き続ける。",
                     evoName = "ケチャップ大洪水", evoPartner = PassiveId.BigPot,
                     evoDesc = "巨大な水たまりが敵を追いかけて広がる。",
-                    baseStats = S(dmg: 7, cd: 4.0f, area: 1f, dur: 2.5f, amt: 1),
-                    evoBonus = S(dmg: 5, area: 0.15f, dur: 1f),
-                    levels = new[] { S(amt: 1), S(dmg: 4, dur: 0.5f), S(area: 0.2f), S(amt: 1), S(dur: 0.5f, dmg: 4), S(area: 0.2f), S(amt: 1, dmg: 4) },
-                    levelText = new[] { "発射数 +1", "ダメージ +4、持続 +0.5秒", "範囲 +20%", "発射数 +1", "持続 +0.5秒、ダメージ +4", "範囲 +20%", "発射数 +1、ダメージ +4" }
+                    baseStats = S(dmg: 9, cd: 3.3f, area: 1f, dur: 3.2f, kb: 2f, amt: 1),
+                    evoBonus = S(dmg: 3, area: 0.2f, dur: 1f),
+                    levels = new[] { S(amt: 1), S(dmg: 4, dur: 0.5f), S(area: 0.2f), S(amt: 1), S(dur: 0.5f, dmg: 4), S(area: 0.2f), S(amt: 1, dmg: 5) },
+                    levelText = new[] { "発射数 +1", "ダメージ +4、持続 +0.5秒", "範囲 +20%", "発射数 +1", "持続 +0.5秒、ダメージ +4", "範囲 +20%", "発射数 +1、ダメージ +5" }
                 },
                 new WeaponDef
                 {
@@ -372,6 +384,22 @@ namespace PastaSurvivors
                     desc = "ケチャップ爆弾で開始。経験値 +15%。",
                     shirt = new Color(0.25f, 0.62f, 0.32f), pants = new Color(0.25f, 0.22f, 0.2f), hair = new Color(0.12f, 0.1f, 0.1f), skin = new Color(0.92f, 0.74f, 0.58f)
                 },
+            };
+
+            Specials = new[]
+            {
+                new SpecialDef { id = SpecialId.Bazooka, name = "乾麺バズーカ", icon = "bazooka", cooldown = 7f,
+                    desc = "スパゲッティの束を撃ち込み、着弾点でまとめて折る大爆発。" },
+                new SpecialDef { id = SpecialId.KnifeDash, name = "ナイフで一刀両断", icon = "knife", cooldown = 5f,
+                    desc = "パスタをナイフで切る禁忌の突進。進路上のイタリア人を斬り抜ける（無敵）。" },
+                new SpecialDef { id = SpecialId.Parmesan, name = "粉チーズ手榴弾", icon = "parmesan", cooldown = 11f,
+                    desc = "偽物の粉チーズの雲。範囲内のイタリア人が呆然と立ち尽くす。" },
+                new SpecialDef { id = SpecialId.Sprinkler, name = "ケチャップ・スプリンクラー", icon = "sprinkler", cooldown = 14f,
+                    desc = "その場に設置。8秒間ケチャップを撒き散らす。通路の入口に置くと強い。" },
+                new SpecialDef { id = SpecialId.SugarEspresso, name = "砂糖10杯エスプレッソ", icon = "sugar", cooldown = 18f,
+                    desc = "7秒間、移動速度+40%・全武器のクールダウン半減。" },
+                new SpecialDef { id = SpecialId.StarBeam, name = "スタ〇ビーム", icon = "starbeam", cooldown = 16f,
+                    desc = "巨大フラペ〇ーノから緑と白のビームを照射。チェーン店のコーヒーに耐えられないイタリア人は恐怖で逃げ惑う。" },
             };
 
             Shop = new[]
