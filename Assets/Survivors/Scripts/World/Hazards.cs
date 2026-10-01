@@ -152,7 +152,7 @@ namespace PastaSurvivors
                 if (e.immune[Slot] > now) continue;
                 e.immune[Slot] = now + 1f;
                 float sign = Mathf.Sign(Vector3.Dot(e.pos - pos, side) + 0.001f);
-                G.Enemies.Damage(e, e.IsBoss ? 150f : 200f, dir * 1.5f + side * sign, 14f, Slot);
+                G.Enemies.Damage(e, e.IsBoss ? 150f : 150f + 40f * G.Enemies.HpMul, dir * 1.5f + side * sign, 14f, Slot);
                 G.Fx.Burst(e.Center, Color.white, 4, 6f, 0.5f, FxKind.Puff);
             }
             var p = G.Player;

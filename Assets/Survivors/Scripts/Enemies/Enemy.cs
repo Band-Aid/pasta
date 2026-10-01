@@ -71,6 +71,13 @@ namespace PastaSurvivors
             walkPhase += dt * rate;
             float s = Mathf.Sin(walkPhase);
             gesture += dt;
+            if (r.wheels != null)
+            {
+                // Roll with the ground speed.
+                r.wheelAngle = Mathf.Repeat(r.wheelAngle + moveSpeed / (r.wheelRadius * scale) * Mathf.Rad2Deg * dt, 360f);
+                var roll = Quaternion.Euler(r.wheelAngle, 0f, 0f);
+                foreach (var w in r.wheels) w.localRotation = roll;
+            }
             if (r.legL != null)
             {
                 float legAmp = panic ? 55f : 34f * amp;

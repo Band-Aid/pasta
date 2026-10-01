@@ -5,6 +5,7 @@ using UnityEngine.InputSystem;
 /// ゲーム全体の状態管理。開始→ウェーブ襲来→HP0でゲームオーバー→リスタート。
 /// 参照はほぼシングルトン経由で解決する。
 /// </summary>
+[RequireComponent(typeof(TimeManager))]
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
@@ -19,31 +20,33 @@ public class GameManager : MonoBehaviour
     {
         if (HasEnded) return;
         IsPaused = paused;
-        hitStopUntil = 0f;
-        Time.timeScale = paused ? 0f : 1f;
+        timeManager.SetPaused(paused);
         Cursor.lockState = paused ? CursorLockMode.None : CursorLockMode.Locked;
         Cursor.visible = paused;
         if (paused) PastaHand.Instance?.CancelCharge();
     }
 
-    private float hitStopUntil;
-    private void Awake() { Instance = this; Time.timeScale = 1f; }
+    private TimeManager timeManager;
+    private void Awake()
+    {
+        Instance = this;
+        timeManager = GetComponent<TimeManager>();
+        timeManager.ResetTime();
+    }
 
     public void HitStop(float duration)
     {
         if (!IsPlaying) return;
-        hitStopUntil = Time.unscaledTime + duration;
-        Time.timeScale = 0.08f;
+        timeManager.RequestHitStop(duration);
     }
 
-    private void OnDisable() { Time.timeScale = 1f; }
+    private void OnDisable() { if (timeManager != null) timeManager.ResetTime(); }
 
 
     private void Start() => StartGame();
 
     private void Update()
     {
-        if (!IsPaused && Time.timeScale != 1f && Time.unscaledTime >= hitStopUntil) Time.timeScale = 1f;
         if (!HasEnded) return;
 
         bool retry = false;
@@ -57,8 +60,7 @@ public class GameManager : MonoBehaviour
     private void StartGame()
     {
         IsPaused = false;
-        Time.timeScale = 1f;
-        hitStopUntil = 0f;
+        timeManager.ResetTime();
         // Include airborne defeated enemies and visual leftovers on retry.
         foreach (var fragment in FindObjectsByType<PastaFragment>()) Destroy(fragment.gameObject);
         foreach (var wave in FindObjectsByType<Shockwave>()) Destroy(wave.gameObject);
@@ -80,7 +82,8 @@ public class GameManager : MonoBehaviour
     {
         if (HasEnded) return;
         Current = State.GameOver;
-        Time.timeScale = 1f;
+        IsPaused = false;
+        timeManager.ResetTime();
         PastaHand.Instance?.CancelCharge();
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -92,8 +95,7 @@ public class GameManager : MonoBehaviour
         if (HasEnded) return;
         Current = State.Won;
         IsPaused = false;
-        Time.timeScale = 1f;
-        hitStopUntil = 0f;
+        timeManager.ResetTime();
         PastaHand.Instance?.CancelCharge();
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;

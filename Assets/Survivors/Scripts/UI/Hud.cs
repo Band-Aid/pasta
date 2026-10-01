@@ -9,12 +9,12 @@ namespace PastaSurvivors
         public FloatingText Floating { get; private set; }
         private RectTransform root;
         private Image xpFill, hpFill, dashFill, bossFill, bannerBg;
-        private Text levelText, timerText, killsText, coinsText, bossName, bannerText, titleText, subText, fpsText;
+        private Text levelText, timerText, killsText, coinsText, bossName, bannerText, titleText, subText, fpsText, threatText;
         private RectTransform hpRoot, bossRoot, bannerRoot, titleRoot;
         private readonly Image[] weaponIcons = new Image[6], passiveIcons = new Image[6];
         private readonly Text[] weaponLevels = new Text[6], passiveLevels = new Text[6];
         private readonly Image[] weaponFrames = new Image[6];
-        private float bannerT, titleT, fpsAcc;
+        private float bannerT, titleT, titleDuration = 3.2f, fpsAcc;
         private int fpsFrames;
         public bool ShowFps;
         private readonly Queue<(string, Color)> bannerQueue = new Queue<(string, Color)>();
@@ -50,6 +50,7 @@ namespace PastaSurvivors
             levelText = UiKit.Label(xpBg.transform, "Level", "Lv 1", 22, Color.white, TextAnchor.MiddleRight, new Vector2(1f, 0.5f), new Vector2(-14, 0), new Vector2(200, 30));
 
             timerText = UiKit.Label(root, "Timer", "00:00", 46, Color.white, TextAnchor.UpperCenter, new Vector2(0.5f, 1f), new Vector2(0, -36), new Vector2(400, 60));
+            threatText = UiKit.Label(root, "Threat", "", 18, new Color(1f, 0.8f, 0.75f, 0.8f), TextAnchor.UpperCenter, new Vector2(0.5f, 1f), new Vector2(0, -88), new Vector2(400, 26), FontStyle.Normal);
             killsText = UiKit.Label(root, "Kills", "0", 26, new Color(1f, 0.92f, 0.85f), TextAnchor.UpperRight, new Vector2(1f, 1f), new Vector2(-24, -40), new Vector2(400, 36));
             coinsText = UiKit.Label(root, "Coins", "0", 26, UiKit.Gold, TextAnchor.UpperRight, new Vector2(1f, 1f), new Vector2(-24, -74), new Vector2(400, 36));
             fpsText = UiKit.Label(root, "Fps", "", 18, new Color(1, 1, 1, 0.6f), TextAnchor.LowerRight, new Vector2(1f, 0f), new Vector2(-10, 8), new Vector2(300, 24), FontStyle.Normal);
@@ -229,11 +230,11 @@ namespace PastaSurvivors
             bannerRoot.gameObject.SetActive(true);
         }
 
-        public void StageIntro(string name, string sub)
+        public void StageIntro(string name, string sub, float duration = 3.2f)
         {
             titleText.text = name;
             subText.text = sub;
-            titleT = 3.2f;
+            titleT = titleDuration = duration;
             titleRoot.gameObject.SetActive(true);
         }
 
@@ -418,7 +419,7 @@ namespace PastaSurvivors
             if (titleT > 0f)
             {
                 titleT -= dt;
-                float a = Mathf.Clamp01(titleT / 0.6f) * Mathf.Clamp01((3.2f - titleT) / 0.3f);
+                float a = Mathf.Clamp01(titleT / 0.6f) * Mathf.Clamp01((titleDuration - titleT) / 0.3f);
                 titleText.canvasRenderer.SetAlpha(a);
                 subText.canvasRenderer.SetAlpha(a);
                 if (titleT <= 0f) titleRoot.gameObject.SetActive(false);
@@ -430,6 +431,7 @@ namespace PastaSurvivors
             levelText.text = "Lv " + p.Level;
             float remaining = G.Stage != null ? G.RunTime : 0f;
             timerText.text = UiKit.Clock(remaining);
+            if (G.Enemies != null) threatText.text = $"敵 HP×{G.Enemies.HpMul:0.0}  攻撃×{G.Enemies.DamageMul:0.0}";
             killsText.text = "撃退 " + (G.Enemies != null ? G.Enemies.Kills : 0);
             coinsText.text = "€ " + p.RunCoins;
 

@@ -465,13 +465,37 @@ namespace PastaSurvivors
 
         public void OnBossSpawned() => Music.PlayTheme(4);
 
+        /// <summary>A boss with another form was beaten: the Italians scatter while she changes.</summary>
+        public void OnBossMorphing(Enemy boss)
+        {
+            G.Cam.Shake(0.5f);
+            G.Sfx.Play(SfxId.Boss, 0.8f, 0.7f);
+            G.Fx.Shout(boss.Center + Vector3.up * 3f, "Aspetta...!", new Color(1f, 0.85f, 0.3f));
+            G.Enemies.RoutAll(G.Player.Position, 999f);
+        }
+
+        /// <summary>The next form drops in with its own title card and line.</summary>
+        public void OnBossMorphed(Enemy boss)
+        {
+            var def = boss.def;
+            boss.lift = 2f;
+            boss.stun = 1.2f;
+            boss.ApplyTransform();
+            G.Cam.Shake(0.8f);
+            G.Sfx.Play(SfxId.Bell, 0.9f);
+            G.Sfx.Play(SfxId.Vroom, 0.7f, 0.8f);
+            if (G.Hud != null) G.Hud.StageIntro(def.name, def.entranceLine, 4.5f);
+            if (!string.IsNullOrEmpty(def.entranceBanner)) G.Fx.Banner(def.entranceBanner, new Color(1f, 0.4f, 0.3f));
+            G.Fx.Shout(boss.Center + Vector3.up * 3f, "Drin drin!", new Color(1f, 0.85f, 0.3f));
+        }
+
         public void OnBossDefeated(Enemy boss)
         {
             if (bossDefeatedAt >= 0f) return;
             bossDefeatedAt = G.RunTime;
             G.Cam.Shake(0.8f);
             G.Sfx.Play(SfxId.Evolve, 0.9f, 0.8f);
-            G.Fx.Banner(G.Stage.bossName + " を追い払った！", UiKit.Gold);
+            G.Fx.Banner(boss.def.name + " を追い払った！", UiKit.Gold);
             G.Enemies.RoutAll(G.Player.Position, 999f);
         }
 

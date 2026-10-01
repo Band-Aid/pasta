@@ -11,7 +11,7 @@ namespace PastaSurvivors
         public Enemy Boss { get; private set; }
         public int HostileCount { get; private set; }
         public int Kills;
-        public float HpMul = 1f, DamageMul = 1f;
+        public float HpMul = 1f, DamageMul = 1f, BossHpMul = 1f;
 
         private readonly Dictionary<EnemyKind, Stack<Enemy>> pools = new Dictionary<EnemyKind, Stack<Enemy>>();
         private readonly List<Enemy> scratch = new List<Enemy>(256);
@@ -60,7 +60,7 @@ namespace PastaSurvivors
             e.pos = new Vector3(pos.x, 0f, pos.z);
             e.scale = def.scale * (def.IsBoss || def.IsProp ? 1f : UnityEngine.Random.Range(0.94f, 1.08f));
             e.radius = def.radius * (e.scale / def.scale);
-            float hpMul = def.IsProp ? 1f : HpMul * extraHp;
+            float hpMul = def.IsProp ? 1f : (def.IsBoss ? BossHpMul : HpMul) * extraHp;
             e.maxHp = e.hp = def.hp * hpMul;
             e.damage = def.damage * DamageMul;
             e.speedMul = 1f;
@@ -225,6 +225,7 @@ namespace PastaSurvivors
 
         private void TickFlee(Enemy e, float dt)
         {
+            if (e.IsBoss && e.def.nextPhase.HasValue) { TickMorph(e, dt); return; }
             e.fleeT += dt;
             e.SetFlash(e.fleeT < 0.08f);
             float sp = e.IsBoss ? 3f : 9f;
@@ -245,6 +246,26 @@ namespace PastaSurvivors
                 if (e.IsBoss) G.Game.OnBossGone(e);
                 Despawn(e);
             }
+        }
+
+        private const float MorphTime = 1.4f;
+
+        /// <summary>A beaten boss with another form twirls in a cloud of flour, then that form takes her place.</summary>
+        private void TickMorph(Enemy e, float dt)
+        {
+            e.fleeT += dt;
+            e.SetFlash(Mathf.Repeat(e.fleeT, 0.24f) < 0.08f);
+            e.facing = Quaternion.Euler(0f, (300f + 900f * e.fleeT) * dt, 0f) * e.facing;
+            e.lift = Mathf.Abs(Mathf.Sin(e.fleeT * 8f)) * 0.5f;
+            if (UnityEngine.Random.value < dt * 14f)
+                G.Fx.Burst(e.Center + UnityEngine.Random.insideUnitSphere * e.radius, new Color(1f, 1f, 1f, 0.7f), 3, 3f, 1.2f, FxKind.Puff);
+            e.ApplyTransform();
+            e.Animate(dt, 6f);
+            if (e.fleeT < MorphTime) return;
+            G.Fx.Burst(e.Center, new Color(1f, 1f, 1f, 0.8f), 18, 7f, 1.6f, FxKind.Puff);
+            var next = Spawn(e.def.nextPhase.Value, e.pos);
+            Despawn(e);
+            if (next != null) G.Game.OnBossMorphed(next);
         }
 
         private void TickDomino(Enemy e, float dt, float now)
@@ -399,7 +420,8 @@ namespace PastaSurvivors
 
         // ---------------- bosses ----------------
 
-        private enum BossMove { Fan, Radial, Charge, Summon, Sweep }
+        private enum BossMove { Fan, Radial, Charge, Summon, Sweep, Ride, Stampede }
+        private static readonly string[] RideShouts = { "Drin drin!", "Permesso!", "Largo, largo!" };
 
         private static BossMove[] Moves(EnemyKind kind)
         {
@@ -407,6 +429,7 @@ namespace PastaSurvivors
             {
                 case EnemyKind.BossNonna: return new[] { BossMove.Fan, BossMove.Summon, BossMove.Charge, BossMove.Fan, BossMove.Charge };
                 case EnemyKind.BossCapitano: return new[] { BossMove.Sweep, BossMove.Charge, BossMove.Summon, BossMove.Sweep, BossMove.Radial };
+                case EnemyKind.BossBikeNonna: return new[] { BossMove.Ride, BossMove.Fan, BossMove.Ride, BossMove.Stampede, BossMove.Ride, BossMove.Radial };
                 default: return new[] { BossMove.Radial, BossMove.Summon, BossMove.Fan, BossMove.Charge, BossMove.Radial, BossMove.Fan };
             }
         }
@@ -428,11 +451,17 @@ namespace PastaSurvivors
                         e.state = 1;
                         e.lockDir = dirP;
                         e.volleys = 0;
-                        float wind = move == BossMove.Summon ? 0.6f : 0.9f * pace;
+                        float wind = move == BossMove.Summon || move == BossMove.Stampede ? 0.6f : 0.9f * pace;
                         e.stateTimer = wind;
                         switch (move)
                         {
                             case BossMove.Charge: G.Fx.Telegraph(TeleShape.Lane, e.pos, dirP, 22f, e.radius * 2f, wind); break;
+                            case BossMove.Ride:
+                                // A run of dashes, each one rung in with the bell and re-aimed at the player.
+                                e.volleys = enraged ? 3 : 2;
+                                RideTelegraph(e, dirP, wind);
+                                G.Fx.Shout(e.Center + Vector3.up * 3f, RideShouts[UnityEngine.Random.Range(0, RideShouts.Length)], new Color(1f, 0.8f, 0.3f));
+                                break;
                             case BossMove.Sweep: G.Fx.Telegraph(TeleShape.Sector, e.pos, dirP, e.def.attackRange, 160f, wind); break;
                             case BossMove.Radial: G.Fx.Telegraph(TeleShape.Circle, e.pos, dirP, 3.5f, 0f, wind); break;
                         }
@@ -448,6 +477,12 @@ namespace PastaSurvivors
                             case BossMove.Fan: e.stateTimer = 0f; e.volleys = enraged ? 4 : 3; break;
                             case BossMove.Radial: e.stateTimer = 0f; e.volleys = enraged ? 3 : 2; break;
                             case BossMove.Charge: e.stateTimer = 1.3f; G.Sfx.Play(SfxId.Boss, 0.5f, 1.4f); G.Cam.Shake(0.3f); break;
+                            case BossMove.Ride: e.stateTimer = 0.95f; G.Sfx.Play(SfxId.Vroom, 0.5f, 1.3f); break;
+                            case BossMove.Stampede:
+                                G.Waves.Stampede(EnemyKind.Vespista, enraged ? 10 : 7);
+                                G.Fx.Shout(e.Center + Vector3.up * 3f, "Ragazzi, in sella!", new Color(1f, 0.8f, 0.3f));
+                                e.stateTimer = 0.8f;
+                                break;
                             case BossMove.Sweep:
                                 SweepHit(e, e.def.attackRange, 160f);
                                 G.Cam.Shake(0.5f);
@@ -469,6 +504,22 @@ namespace PastaSurvivors
                         e.facing = e.lockDir;
                         if (e.stateTimer <= 0f || !G.Arena.Inside(e.pos, e.radius + 0.5f) || G.Arena.Blocked(e.pos + e.lockDir * (e.radius + 0.4f), 0.05f)) { EndBossMove(e, pace); return Vector3.zero; }
                         return e.lockDir * (enraged ? 16f : 13f);
+                    }
+                    if (move == BossMove.Ride)
+                    {
+                        e.facing = e.lockDir;
+                        if (e.stateTimer <= 0f || !G.Arena.Inside(e.pos, e.radius + 0.5f) || G.Arena.Blocked(e.pos + e.lockDir * (e.radius + 0.4f), 0.05f))
+                        {
+                            if (e.volleys <= 0) { EndBossMove(e, pace); return Vector3.zero; }
+                            // Brake, ring again and line up on the player for the next dash.
+                            e.volleys--;
+                            e.state = 1;
+                            e.lockDir = dirP;
+                            e.stateTimer = 0.6f * pace;
+                            RideTelegraph(e, dirP, e.stateTimer);
+                            return Vector3.zero;
+                        }
+                        return e.lockDir * (enraged ? 18f : 15f);
                     }
                     if (move == BossMove.Fan || move == BossMove.Radial)
                     {
@@ -506,6 +557,12 @@ namespace PastaSurvivors
                     if (e.stateTimer <= 0f) EndBossMove(e, pace);
                     return Vector3.zero;
             }
+        }
+
+        private static void RideTelegraph(Enemy e, Vector3 dir, float wind)
+        {
+            G.Fx.Telegraph(TeleShape.Lane, e.pos, dir, 24f, e.radius * 2f, wind);
+            G.Sfx.Play(SfxId.Bell, 0.7f, UnityEngine.Random.Range(0.95f, 1.05f));
         }
 
         private static void EndBossMove(Enemy e, float pace)
@@ -568,7 +625,14 @@ namespace PastaSurvivors
             }
             else if (UnityEngine.Random.value < 0.012f) G.Pickups.Drop(PickupKind.Coin, e.pos);
             else if (UnityEngine.Random.value < 0.006f) G.Pickups.Drop(PickupKind.Pizza, e.pos);
-            if (e.IsBoss)
+            if (e.IsBoss && e.def.nextPhase.HasValue)
+            {
+                // Not over yet: she stays put and changes form (TickMorph).
+                e.knock = Vector3.zero;
+                Boss = null;
+                G.Game.OnBossMorphing(e);
+            }
+            else if (e.IsBoss)
             {
                 G.Pickups.Drop(PickupKind.Chest, e.pos);
                 G.Pickups.Drop(PickupKind.CoinBag, e.pos + Vector3.right * 1.5f);

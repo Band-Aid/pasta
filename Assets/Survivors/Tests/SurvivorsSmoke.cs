@@ -206,6 +206,13 @@ namespace PastaSurvivors
             Check(drawn > 0f && drawn <= Arena.HealCapacity && arena.DrawHeal(new Vector3(fountain.c.x, 0f, fountain.c.y), 10f) == 0f, "Healing fountain runs dry and has to refill");
             yield return Real(7f);
             Check(G.Enemies.Kills > 0, "Spaghetti snap drives Italians away (kills " + G.Enemies.Kills + ")");
+            float hpAtLevel = G.Enemies.HpMul, dmgAtLevel = G.Enemies.DamageMul;
+            int realLevel = G.Player.Level;
+            G.Player.Level += 20;
+            yield return Real(0.2f);
+            Check(G.Enemies.HpMul > hpAtLevel * 1.5f && G.Enemies.DamageMul > dmgAtLevel * 1.15f && G.Enemies.BossHpMul < G.Enemies.HpMul,
+                $"Italians toughen with the player's level (HP x{hpAtLevel:0.00} -> x{G.Enemies.HpMul:0.00})");
+            G.Player.Level = realLevel;
             Check(G.Pickups.Active.Count > 0 || G.Player.Xp > 0 || G.Player.Level > 1, "Italians drop experience");
             yield return Shot("05-roma-early");
 
@@ -379,6 +386,23 @@ namespace PastaSurvivors
             }
             yield return Real(2.5f);
             yield return Shot("11-roma-boss");
+            if (G.Enemies.Boss != null) G.Enemies.Damage(G.Enemies.Boss, 1e7f, Vector3.forward, 0f, 0);
+            yield return Real(2.4f);
+            var bike = G.Enemies.Boss;
+            Check(game.State == GameState.Playing && bike != null && bike.def.kind == EnemyKind.BossBikeNonna,
+                "Grande Nonna grows wheels and comes back as Bike Nonna");
+            // Spaghetti and the evolved quake stun on hit and would keep her parked; Penne lets her ride.
+            ResetKit(WeaponId.PenneShot);
+            if (bike != null)
+            {
+                bike.pos = G.Player.Position + Vector3.forward * 8f;
+                bike.ApplyTransform();
+            }
+            yield return Real(0.6f);
+            yield return Shot("11b-roma-bike-nonna");
+            yield return Real(3.5f);
+            Check(bike != null && bike.pattern >= 0, "Bike Nonna rides at the player");
+            yield return Shot("11c-roma-bike-ride");
             if (G.Enemies.Boss != null) G.Enemies.Damage(G.Enemies.Boss, 1e7f, Vector3.forward, 0f, 0);
             yield return Real(5.5f);
             Check(game.State == GameState.Cleared, "Defeating the boss clears the stage");

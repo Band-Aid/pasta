@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace PastaSurvivors
 {
-    public enum SfxId { Snap, Pop, Slam, Whoosh, Splat, Gem, Coin, Heal, Magnet, Hurt, Poof, Throw, Vroom, Boss, LevelUp, Chest, Crate, Dash, Select, Confirm, Evolve, Beam }
+    public enum SfxId { Snap, Pop, Slam, Whoosh, Splat, Gem, Coin, Heal, Magnet, Hurt, Poof, Throw, Vroom, Boss, LevelUp, Chest, Crate, Dash, Select, Confirm, Evolve, Beam, Bell }
 
     /// <summary>All sound effects are synthesised at startup; a small voice pool with per-sound rate limiting keeps hordes from clipping.</summary>
     public class Sfx : MonoBehaviour
@@ -47,6 +47,8 @@ namespace PastaSurvivors
             clips[SfxId.Confirm] = Make("confirm", 0.18f, (t, n) => (Sq(t * (t < 0.06f ? 660f : 990f))) * Env(t, 0.001f, 14f) * 0.3f);
             clips[SfxId.Beam] = Make("beam", 0.5f, (t, n) => (Saw(t * 180f) * 0.25f + Saw(t * 271f) * 0.2f + Mathf.Sin(2 * Mathf.PI * 880f * t) * 0.12f * Mathf.Sin(t * 60f) + n * 0.12f)
                 * Mathf.Min(1f, t / 0.04f) * Mathf.Min(1f, (0.5f - t) / 0.08f));
+            // Bicycle bell: two strikes of an inharmonic bell with a clapper rattle.
+            clips[SfxId.Bell] = Make("bell", 0.75f, (t, n) => Bell(t) + Bell(t - 0.17f) * 0.9f);
             clips[SfxId.Evolve] = Make("evolve", 1.6f, (t, n) => Arp(t, new[] { 262f, 330f, 392f, 523f, 659f, 784f, 1047f, 1319f }, 0.1f) * 0.5f + Mathf.Sin(2 * Mathf.PI * 131f * t) * Env(t, 0.1f, 1.5f) * 0.2f);
         }
 
@@ -66,6 +68,14 @@ namespace PastaSurvivors
         private static float Env(float t, float attack, float decay) => Mathf.Min(1f, t / attack) * Mathf.Exp(-t * decay);
         private static float Saw(float phase) => 2f * (phase - Mathf.Floor(phase + 0.5f));
         private static float Sq(float phase) => (phase - Mathf.Floor(phase)) < 0.5f ? 1f : -1f;
+
+        private static float Bell(float t)
+        {
+            if (t < 0f) return 0f;
+            const float f = 2093f;
+            float tone = Mathf.Sin(2 * Mathf.PI * f * t) * 0.5f + Mathf.Sin(2 * Mathf.PI * f * 2.76f * t) * 0.25f + Mathf.Sin(2 * Mathf.PI * f * 5.4f * t) * 0.1f;
+            return tone * Env(t, 0.001f, 7f) * (0.75f + 0.25f * Mathf.Sin(2 * Mathf.PI * 31f * t)) * 0.6f;
+        }
 
         private static float Arp(float t, float[] notes, float step)
         {

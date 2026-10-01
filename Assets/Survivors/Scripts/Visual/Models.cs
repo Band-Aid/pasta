@@ -8,8 +8,9 @@ namespace PastaSurvivors
     public class Rig
     {
         public Transform root, torso, legL, legR, armL, armR, held;
+        public Transform[] wheels;
         public Renderer[] renderers;
-        public float armRest;
+        public float armRest, wheelRadius, wheelAngle;
         public bool seated;
     }
 
@@ -18,6 +19,10 @@ namespace PastaSurvivors
         public Mesh body, leg, armL, armR;
         public float hipX = 0.13f, hipY = 0.78f, shoulderX = 0.31f, shoulderY = 1.3f, armRest;
         public bool seated;
+        /// <summary>Optional wheels (origin at the hub) that roll with the ground speed.</summary>
+        public Mesh wheel;
+        public Vector3[] wheelPos;
+        public float wheelRadius;
     }
 
     public enum Hat { None, Toque, Boater, Fedora, Cap, PaperHat, Helmet, CaptainHat, Headband }
@@ -68,6 +73,12 @@ namespace PastaSurvivors
             }
             rig.armL = Part("ArmL", rig.torso, new Vector3(-m.shoulderX, m.shoulderY, 0), m.armL, renderers);
             rig.armR = Part("ArmR", rig.torso, new Vector3(m.shoulderX, m.shoulderY, 0), m.armR, renderers);
+            if (m.wheel != null)
+            {
+                rig.wheels = new Transform[m.wheelPos.Length];
+                for (int i = 0; i < m.wheelPos.Length; i++) rig.wheels[i] = Part("Wheel" + i, rig.root, m.wheelPos[i], m.wheel, renderers);
+                rig.wheelRadius = m.wheelRadius;
+            }
             rig.renderers = renderers.ToArray();
             return rig;
         }
@@ -178,6 +189,9 @@ namespace PastaSurvivors
                         shirt = Color.white, stripes = new Color(0.55f, 0.08f, 0.12f), pants = new Color(0.08f, 0.08f, 0.1f), scarf = Azzurro,
                         hat = Hat.CaptainHat, hatColor = new Color(0.1f, 0.12f, 0.25f), moustache = 2, heldR = Held.GoldOar, belly = true
                     }, kind);
+                    break;
+                case EnemyKind.BossBikeNonna:
+                    m = BikeNonna();
                     break;
                 case EnemyKind.BossDon:
                     m = Humanoid(new HumanSpec
@@ -487,6 +501,137 @@ namespace PastaSurvivors
             m.armR = Arm(s, Held.None, false);
             m.shoulderY = 1.4f;
             return m;
+        }
+
+        /// <summary>Grande Nonna with wheels: she would have been a bike. A celeste step-through city bike, basket of spaghetti and all.</summary>
+        private static RigMeshes BikeNonna()
+        {
+            var s = new HumanSpec
+            {
+                shirt = new Color(0.14f, 0.1f, 0.16f), skirt = new Color(0.12f, 0.08f, 0.14f), apron = new Color(0.95f, 0.93f, 0.85f),
+                scarf = new Color(0.55f, 0.1f, 0.18f), hair = new Color(0.9f, 0.9f, 0.92f), hairStyle = 1, glasses = 1, necklace = true
+            };
+            const float wheelR = 0.45f;
+            var rearHub = new Vector3(0f, wheelR, -0.75f);
+            var frontHub = new Vector3(0f, wheelR, 0.5f);
+            var m = new RigMeshes
+            {
+                seated = true, armRest = -58f, leg = null, shoulderY = 1.58f,
+                wheelPos = new[] { rearHub, frontHub }, wheelRadius = wheelR
+            };
+
+            // ---- wheel (origin at the hub, axle along X): tyre, rim, spokes and hub
+            kit.Clear();
+            var tyre = new Color(0.1f, 0.1f, 0.1f);
+            var steel = new Color(0.78f, 0.8f, 0.84f);
+            Ring(Vector3.zero, wheelR - 0.035f, 18, 0.07f, tyre, 0f, 360f);
+            Ring(Vector3.zero, wheelR - 0.08f, 18, 0.025f, steel, 0f, 360f);
+            for (int i = 0; i < 8; i++)
+            {
+                float a = i * Mathf.PI / 4f;
+                kit.Bar(Vector3.zero, new Vector3(0f, Mathf.Sin(a), Mathf.Cos(a)) * (wheelR - 0.08f), 0.022f, steel);
+            }
+            kit.Cyl(Vector3.zero, new Vector3(0.09f, 0.14f, 0.09f), steel, new Vector3(0, 0, 90), 8);
+            m.wheel = kit.ToMesh("BikeWheel");
+
+            // ---- bike frame
+            kit.Clear();
+            var celeste = new Color(0.5f, 0.82f, 0.76f);
+            var bb = new Vector3(0f, 0.42f, -0.15f);
+            var seatTop = new Vector3(0f, 0.98f, -0.2f);
+            var headLow = new Vector3(0f, 0.78f, 0.36f);
+            var headTop = new Vector3(0f, 1.02f, 0.33f);
+            kit.Bar(bb, seatTop, 0.06f, celeste);
+            kit.Bar(headLow, headTop, 0.07f, celeste);
+            // Step-through: two low tubes swoop from the head tube to the bottom bracket.
+            kit.Bar(headTop + new Vector3(0, -0.06f, 0), new Vector3(0f, 0.62f, 0.12f), 0.055f, celeste);
+            kit.Bar(new Vector3(0f, 0.62f, 0.12f), bb, 0.055f, celeste);
+            kit.Bar(headLow, new Vector3(0f, 0.5f, 0.15f), 0.05f, celeste);
+            kit.Bar(new Vector3(0f, 0.5f, 0.15f), bb + new Vector3(0, 0.02f, 0.04f), 0.05f, celeste);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                var hubSide = new Vector3(side * 0.06f, 0f, 0f);
+                kit.Bar(bb + hubSide, rearHub + hubSide, 0.035f, celeste);
+                kit.Bar(seatTop + new Vector3(side * 0.04f, -0.06f, 0f), rearHub + hubSide, 0.035f, celeste);
+                kit.Bar(headLow + hubSide, frontHub + hubSide, 0.04f, celeste);
+            }
+            // Mudguards
+            Ring(rearHub, wheelR + 0.05f, 10, 0.05f, celeste, 30f, 200f);
+            Ring(frontHub, wheelR + 0.05f, 10, 0.05f, celeste, -15f, 150f);
+            // Crank, chainring and pedals
+            kit.Cyl(bb + new Vector3(0.07f, 0f, 0f), new Vector3(0.22f, 0.02f, 0.22f), steel, new Vector3(0, 0, 90), 12);
+            kit.Bar(bb + new Vector3(0.1f, 0f, 0f), bb + new Vector3(0.1f, -0.14f, 0.08f), 0.03f, steel);
+            kit.Box(bb + new Vector3(0.15f, -0.15f, 0.08f), new Vector3(0.1f, 0.025f, 0.06f), tyre);
+            kit.Bar(bb + new Vector3(-0.1f, 0f, 0f), bb + new Vector3(-0.1f, 0.14f, -0.08f), 0.03f, steel);
+            // Saddle, stem, swept-back bars, bell and lamp
+            kit.Box(seatTop + new Vector3(0, 0.04f, -0.02f), new Vector3(0.22f, 0.07f, 0.3f), new Color(0.45f, 0.26f, 0.14f));
+            var stem = new Vector3(0f, 1.15f, 0.31f);
+            kit.Bar(headTop, stem, 0.04f, steel);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                var mid = new Vector3(side * 0.2f, 1.17f, 0.37f);
+                var grip = new Vector3(side * 0.31f, 1.2f, 0.5f);
+                kit.Bar(stem, mid, 0.035f, steel);
+                kit.Bar(mid, grip, 0.035f, steel);
+                kit.Bar(grip, grip + new Vector3(side * 0.08f, 0f, 0.04f), 0.05f, new Color(0.35f, 0.2f, 0.1f));
+            }
+            kit.Cyl(new Vector3(0.14f, 1.22f, 0.38f), new Vector3(0.1f, 0.05f, 0.1f), new Color(1f, 0.82f, 0.3f), default, 10);
+            kit.Ball(new Vector3(0f, 1.0f, 0.44f), new Vector3(0.14f, 0.14f, 0.1f), new Color(1f, 0.95f, 0.7f));
+            // Wicker basket with spaghetti, tomatoes and basil
+            var wicker = new Color(0.72f, 0.52f, 0.28f);
+            var basket = new Vector3(0f, 1.05f, 0.66f);
+            kit.Box(basket, new Vector3(0.46f, 0.3f, 0.34f), wicker);
+            kit.Box(basket + new Vector3(0, 0.15f, 0), new Vector3(0.4f, 0.02f, 0.28f), new Color(0.35f, 0.22f, 0.1f));
+            kit.Box(basket + new Vector3(0, 0.05f, 0), new Vector3(0.47f, 0.035f, 0.35f), wicker * 0.8f);
+            kit.Box(basket + new Vector3(0, -0.06f, 0), new Vector3(0.47f, 0.035f, 0.35f), wicker * 0.8f);
+            for (int i = 0; i < 6; i++)
+                kit.Cyl(basket + new Vector3(-0.1f + i * 0.035f, 0.3f, -0.04f + (i % 2) * 0.05f), new Vector3(0.025f, 0.42f, 0.025f), PastaGold, new Vector3(-8f + i * 3f, 0f, 12f - i * 5f), 5);
+            kit.Ball(basket + new Vector3(0.12f, 0.17f, 0.07f), 0.14f, Tomato);
+            kit.Ball(basket + new Vector3(0.03f, 0.18f, 0.1f), 0.12f, Tomato);
+            kit.Ball(basket + new Vector3(-0.12f, 0.17f, 0.08f), new Vector3(0.12f, 0.04f, 0.08f), Basil, new Vector3(0, 30, 20));
+            // Rear rack with a little tricolore pennant
+            kit.Box(new Vector3(0f, 1.0f, -0.72f), new Vector3(0.22f, 0.03f, 0.4f), new Color(0.3f, 0.3f, 0.32f));
+            kit.Bar(new Vector3(0f, 1.0f, -0.88f), new Vector3(0f, 1.75f, -0.95f), 0.02f, steel);
+            kit.Box(new Vector3(0f, 1.66f, -1.0f), new Vector3(0.02f, 0.14f, 0.06f), Basil);
+            kit.Box(new Vector3(0f, 1.66f, -1.06f), new Vector3(0.02f, 0.14f, 0.06f), Color.white);
+            kit.Box(new Vector3(0f, 1.66f, -1.12f), new Vector3(0.02f, 0.14f, 0.06f), Tomato);
+
+            // ---- Nonna, perched on the saddle; her skirt flows down into the frame where her legs would be
+            kit.Frame = Matrix4x4.Translate(new Vector3(0f, 0.28f, -0.12f));
+            kit.Ball(new Vector3(0, 1.05f, 0), new Vector3(0.6f, 0.72f, 0.44f), s.shirt);
+            kit.Cyl(new Vector3(0, 0.82f, 0), new Vector3(0.5f, 0.2f, 0.38f), s.skirt.Value);
+            kit.Cone(new Vector3(0, 0.52f, 0.02f), new Vector3(0.7f, 0.6f, 0.66f), s.skirt.Value, default, 0.62f, 12);
+            kit.Box(new Vector3(0, 1.17f, 0.22f), new Vector3(0.3f, 0.26f, 0.04f), s.apron.Value, new Vector3(-12, 0, 0));
+            kit.Cyl(new Vector3(0, 1.38f, 0), new Vector3(0.38f, 0.1f, 0.34f), s.scarf.Value);
+            // Scarf ends streaming out behind her
+            kit.Box(new Vector3(0.06f, 1.36f, -0.3f), new Vector3(0.1f, 0.04f, 0.3f), s.scarf.Value, new Vector3(-12, 10, 0));
+            kit.Box(new Vector3(-0.04f, 1.31f, -0.36f), new Vector3(0.1f, 0.04f, 0.36f), s.scarf.Value, new Vector3(-20, -8, 0));
+            for (int i = 0; i < 7; i++)
+            {
+                float a = Mathf.Lerp(-70, 70, i / 6f) * Mathf.Deg2Rad;
+                kit.Ball(new Vector3(Mathf.Sin(a) * 0.17f, 1.33f - Mathf.Cos(a) * 0.05f, 0.14f + Mathf.Cos(a) * 0.07f), 0.05f, new Color(0.97f, 0.95f, 0.9f));
+            }
+            Head(s, 1.66f);
+            // Riding goggles pushed up on her forehead
+            kit.Cyl(new Vector3(0f, 1.86f, -0.01f), new Vector3(0.55f, 0.05f, 0.53f), new Color(0.3f, 0.2f, 0.12f), default, 14);
+            for (int side = -1; side <= 1; side += 2)
+                kit.Cyl(new Vector3(side * 0.1f, 1.88f, 0.23f), new Vector3(0.15f, 0.06f, 0.15f), new Color(1f, 0.7f, 0.2f), new Vector3(70, 0, 0), 10);
+            kit.Frame = Matrix4x4.identity;
+            m.body = kit.ToMesh("BikeNonna");
+            m.armL = Arm(s, Held.None, true);
+            m.armR = Arm(s, Held.None, false);
+            return m;
+        }
+
+        /// <summary>An arc of bars in the YZ plane (a wheel or mudguard seen from the side); angles from +Z toward +Y.</summary>
+        private static void Ring(Vector3 center, float radius, int segments, float thickness, Color color, float fromDeg, float toDeg)
+        {
+            for (int i = 0; i < segments; i++)
+            {
+                float a0 = Mathf.Lerp(fromDeg, toDeg, (float)i / segments) * Mathf.Deg2Rad;
+                float a1 = Mathf.Lerp(fromDeg, toDeg, (float)(i + 1) / segments) * Mathf.Deg2Rad;
+                kit.Bar(center + new Vector3(0f, Mathf.Sin(a0), Mathf.Cos(a0)) * radius, center + new Vector3(0f, Mathf.Sin(a1), Mathf.Cos(a1)) * radius, thickness, color);
+            }
         }
 
         private static RigMeshes Barrel()

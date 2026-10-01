@@ -40,7 +40,7 @@ namespace PastaSurvivors
     }
 
     public enum Behavior { Chase, Thrower, Charger, Sweeper, Elite, Boss, Prop }
-    public enum EnemyKind { Signore, Tifoso, Mamma, Chef, Vespista, Gondoliere, Pizzaiolo, Mafioso, Nonna, BossNonna, BossCapitano, BossDon, Barrel }
+    public enum EnemyKind { Signore, Tifoso, Mamma, Chef, Vespista, Gondoliere, Pizzaiolo, Mafioso, Nonna, BossNonna, BossCapitano, BossDon, BossBikeNonna, Barrel }
     public enum ShotKind { Penne, Fusilli, Farfalle, Ketchup, Pizza, Slipper, Dough, Meatball, Pineapple, Oar, Bazooka, Drop, Parmesan }
 
     /// <summary>Special weapons: picked up on the map, fired manually, then cool down.</summary>
@@ -61,6 +61,10 @@ namespace PastaSurvivors
         public int xp;
         public Behavior behavior;
         public ShotKind shot;
+        /// <summary>A boss that comes back as this kind when beaten instead of clearing the stage.</summary>
+        public EnemyKind? nextPhase;
+        /// <summary>Title-card line and banner shown when this boss arrives as a later phase.</summary>
+        public string entranceLine, entranceBanner;
         public bool IsBoss => behavior == Behavior.Boss;
         public bool IsProp => behavior == Behavior.Prop;
     }
@@ -93,6 +97,11 @@ namespace PastaSurvivors
         public StageTheme theme;
         public string name, sub, bossName;
         public float duration = 600f, hpMul = 1f, damageMul = 1f;
+        /// <summary>
+        /// Enemy scaling on top of the stage multiplier: HP and damage grow with elapsed minutes and with the
+        /// player's level, so a strong build still meets resistance late in the run. Bosses use half the level term.
+        /// </summary>
+        public float hpPerMinute = 0.075f, hpPerLevel = 0.03f, damagePerMinute = 0.04f, damagePerLevel = 0.01f;
         public EnemyKind boss;
         public WavePhase[] phases;
         public StageEvent[] events;
@@ -264,7 +273,12 @@ namespace PastaSurvivors
             E(EnemyKind.Pizzaiolo, "ピッツァイオーロ", 30, 2.1f, 9, 3, Behavior.Thrower, 0.45f, 1f, 0.3f, 10f, 5f, ShotKind.Dough);
             E(EnemyKind.Mafioso, "マフィオーソ", 75, 2.6f, 11, 5, Behavior.Chase, 0.5f, 1.1f, 0.65f);
             E(EnemyKind.Nonna, "ノンナ", 420, 1.8f, 12, 25, Behavior.Elite, 0.65f, 1.35f, 0.85f);
-            E(EnemyKind.BossNonna, "グランデ・ノンナ", 3200, 2.1f, 22, 200, Behavior.Boss, 1.5f, 2.9f, 1f, 14f, 3.4f, ShotKind.Slipper);
+            E(EnemyKind.BossNonna, "グランデ・ノンナ", 2200, 2.1f, 22, 200, Behavior.Boss, 1.5f, 2.9f, 1f, 14f, 3.4f, ShotKind.Slipper);
+            // Grande Nonna's second form: beaten once, she grows wheels and comes back as a bicycle.
+            E(EnemyKind.BossBikeNonna, "バイクばばぁ", 2400, 3.2f, 24, 250, Behavior.Boss, 1.5f, 2.2f, 1f, 14f, 3.0f, ShotKind.Slipper);
+            Enemies[EnemyKind.BossNonna].nextPhase = EnemyKind.BossBikeNonna;
+            Enemies[EnemyKind.BossBikeNonna].entranceLine = "“If my grandma had wheels, she would've been a bike.”<size=24>  — Gino D'Acampo</size>";
+            Enemies[EnemyKind.BossBikeNonna].entranceBanner = "グランデ・ノンナに車輪が生えた！";
             E(EnemyKind.BossCapitano, "イル・カピターノ", 4200, 2.3f, 26, 200, Behavior.Boss, 1.4f, 2.7f, 1f, 7f, 3.0f, ShotKind.Oar);
             E(EnemyKind.BossDon, "ドン・カルボナーラ", 5600, 2.2f, 30, 200, Behavior.Boss, 1.4f, 2.7f, 1f, 16f, 2.8f, ShotKind.Meatball);
             E(EnemyKind.Barrel, "ワイン樽", 1, 0, 0, 0, Behavior.Prop, 0.55f, 1f, 1f);
@@ -276,6 +290,7 @@ namespace PastaSurvivors
                 {
                     index = 0, theme = StageTheme.Roma, name = "ローマ", sub = "トラステヴェレの広場", boss = EnemyKind.BossNonna,
                     bossName = "グランデ・ノンナ", hpMul = 1f, damageMul = 1f,
+                    hpPerLevel = 0.02f, damagePerLevel = 0.006f, // the first stage stays forgiving for new players
                     phases = new[]
                     {
                         new WavePhase { start = 0, minAlive = 10, interval = 1.5f, batch = 2, mix = M((EnemyKind.Signore, 10)) },
