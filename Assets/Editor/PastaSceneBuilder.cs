@@ -89,6 +89,7 @@ public static class PastaSceneBuilder
 
         // --- マネージャ
         var managers = new GameObject("Managers");
+        managers.AddComponent<TimeManager>();
         var game = managers.AddComponent<GameManager>();
 
         var score = managers.AddComponent<ScoreManager>();

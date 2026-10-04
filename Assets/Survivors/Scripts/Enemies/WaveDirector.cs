@@ -32,9 +32,13 @@ namespace PastaSurvivors
             // Difficulty climbs every minute on top of the stage multiplier.
             float minutes = t / 60f / Mathf.Max(0.01f, TimeScale);
             // Later stages open gently (every run starts at level 1) and reach their full multiplier by minute 4.
+            // On top of that, Italians toughen with time and with the player's level.
             float settle = Mathf.Clamp01(minutes / 4f);
-            G.Enemies.HpMul = Mathf.Lerp(1f, stage.hpMul, settle) * (1f + minutes * 0.075f);
-            G.Enemies.DamageMul = Mathf.Lerp(1f, stage.damageMul, settle) * (1f + minutes * 0.04f);
+            int levels = G.Player != null ? G.Player.Level - 1 : 0;
+            float stageHp = Mathf.Lerp(1f, stage.hpMul, settle) * (1f + minutes * stage.hpPerMinute);
+            G.Enemies.HpMul = stageHp * (1f + levels * stage.hpPerLevel);
+            G.Enemies.BossHpMul = stageHp * (1f + levels * stage.hpPerLevel * 0.5f);
+            G.Enemies.DamageMul = Mathf.Lerp(1f, stage.damageMul, settle) * (1f + minutes * stage.damagePerMinute) * (1f + levels * stage.damagePerLevel);
 
             while (nextEvent < stage.events.Length && t >= stage.events[nextEvent].time * TimeScale)
             {
@@ -109,6 +113,37 @@ namespace PastaSurvivors
             }
         }
 
+        /// <summary>
+        /// A column of Vespas crossing the screen: they spawn in a line and start charging immediately.
+        /// A wall of Vespas with one escape gap near the player: read the lanes, step into the gap.
+        /// </summary>
+        public void Stampede(EnemyKind kind, int count)
+        {
+            var pp = G.Player.Position;
+            var dir = Quaternion.Euler(0, Random.Range(0, 4) * 90f + 45f, 0) * Vector3.forward;
+            var side = Vector3.Cross(Vector3.up, dir);
+            var start = pp - dir * 20f;
+            float gapCenter = Random.Range(-3.5f, 3.5f);
+            const float spacing = 2.4f, gapHalf = 3f;
+            int spawned = 0;
+            for (int k = -count; k <= count && spawned < count; k++)
+            {
+                float offset = k * spacing;
+                if (Mathf.Abs(offset - gapCenter) < gapHalf) continue;
+                if (Mathf.Abs(offset) > count * spacing * 0.6f + gapHalf) continue;
+                int i = spawned++;
+                var p = G.Arena.Clamp(start + side * offset - dir * Random.Range(0f, 2f), 1f);
+                var e = G.Enemies.Spawn(kind, p);
+                if (e == null) continue;
+                e.lockDir = dir;
+                e.facing = dir;
+                e.state = 1;
+                e.stateTimer = 1.3f + i * 0.04f;
+                G.Fx.Telegraph(TeleShape.Lane, p, dir, 30f, 1.2f, e.stateTimer);
+            }
+            G.Sfx.Play(SfxId.Vroom, 0.7f, 0.8f);
+        }
+
         private void Run(StageEvent ev)
         {
             var pp = G.Player.Position;
@@ -131,33 +166,8 @@ namespace PastaSurvivors
                         break;
                     }
                 case StageEventType.Stampede:
-                    {
-                        // A column of Vespas crossing the screen: they spawn in a line and start charging immediately.
-                        // A wall of Vespas with one escape gap near the player: read the lanes, step into the gap.
-                        var dir = Quaternion.Euler(0, Random.Range(0, 4) * 90f + 45f, 0) * Vector3.forward;
-                        var side = Vector3.Cross(Vector3.up, dir);
-                        var start = pp - dir * 20f;
-                        float gapCenter = Random.Range(-3.5f, 3.5f);
-                        const float spacing = 2.4f, gapHalf = 3f;
-                        int spawned = 0;
-                        for (int k = -ev.count; k <= ev.count && spawned < ev.count; k++)
-                        {
-                            float offset = k * spacing;
-                            if (Mathf.Abs(offset - gapCenter) < gapHalf) continue;
-                            if (Mathf.Abs(offset) > ev.count * spacing * 0.6f + gapHalf) continue;
-                            int i = spawned++;
-                            var p = G.Arena.Clamp(start + side * offset - dir * Random.Range(0f, 2f), 1f);
-                            var e = G.Enemies.Spawn(ev.kind, p);
-                            if (e == null) continue;
-                            e.lockDir = dir;
-                            e.facing = dir;
-                            e.state = 1;
-                            e.stateTimer = 1.3f + i * 0.04f;
-                            G.Fx.Telegraph(TeleShape.Lane, p, dir, 30f, 1.2f, e.stateTimer);
-                        }
-                        G.Sfx.Play(SfxId.Vroom, 0.7f, 0.8f);
-                        break;
-                    }
+                    Stampede(ev.kind, ev.count);
+                    break;
                 case StageEventType.Elite:
                     for (int i = 0; i < ev.count; i++) G.Enemies.Spawn(ev.kind, SpawnPoint(Vector3.zero, 0.8f));
                     break;
