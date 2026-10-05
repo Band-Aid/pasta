@@ -419,8 +419,7 @@ namespace PastaSurvivors
 
     public class CarbonaraAura : Weapon
     {
-        private const float HealInterval = 1f, HealPerEnemy = 0.35f, MaxHealPerPulse = 1f;
-        private float healCooldown;
+        private const float HealPerHit = 0.35f, MaxHealPerAttack = 1.5f;
 
         public float Radius => 2.2f * Area(Raw) * (evolved ? 1f : 1f);
 
@@ -429,29 +428,25 @@ namespace PastaSurvivors
             float radius = 2.2f * Area(s);
             int n = G.Enemies.Query(P.Position, radius, hits);
             float dmg = Dmg(s);
-            bool canHeal = (evolved || IsMain) && healCooldown <= 0f && P.Hp < P.MaxHp;
-            float healing = 0f;
+            bool canHeal = evolved || IsMain;
+            float healBudget = MaxHealPerAttack;
             for (int i = 0; i < n; i++)
             {
                 var e = hits[i];
-                if (!e.active || e.fleeing) continue;
-                // Include lethal hits, but breaking props must not grant life steal.
-                bool drainable = !e.IsProp;
                 G.Enemies.Damage(e, dmg, e.pos - P.Position, s.knockback, Slot);
                 if (evolved) e.slow = Mathf.Max(e.slow, 0.6f);
-                if (canHeal && drainable) healing = Mathf.Min(MaxHealPerPulse, healing + HealPerEnemy);
-            }
-            if (healing > 0f)
-            {
-                P.Heal(healing, false);
-                // Separate from attack cooldown: haste and crowds cannot multiply healing.
-                healCooldown = HealInterval;
+                if (canHeal && healBudget > 0f)
+                {
+                    // Keep healing on every hit (including props), but cap the total exactly.
+                    float healing = Mathf.Min(HealPerHit, healBudget);
+                    P.Heal(healing, false);
+                    healBudget -= healing;
+                }
             }
         }
 
         public override void Tick(float dt)
         {
-            healCooldown = Mathf.Max(0f, healCooldown - dt);
             base.Tick(dt);
             G.Fx.Aura(P.Position, Radius, evolved);
         }
