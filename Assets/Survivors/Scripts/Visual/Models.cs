@@ -12,6 +12,7 @@ namespace PastaSurvivors
         public Renderer[] renderers;
         public float armRest, wheelRadius, wheelAngle;
         public bool seated;
+        public bool freeHandL, freeHandR;
     }
 
     public class RigMeshes
@@ -19,6 +20,7 @@ namespace PastaSurvivors
         public Mesh body, leg, armL, armR;
         public float hipX = 0.13f, hipY = 0.78f, shoulderX = 0.31f, shoulderY = 1.3f, armRest;
         public bool seated;
+        public bool freeHandL, freeHandR;
         /// <summary>Optional wheels (origin at the hub) that roll with the ground speed.</summary>
         public Mesh wheel;
         public Vector3[] wheelPos;
@@ -61,7 +63,7 @@ namespace PastaSurvivors
 
         public static Rig Build(RigMeshes m, Transform parent, string name)
         {
-            var rig = new Rig { armRest = m.armRest, seated = m.seated };
+            var rig = new Rig { armRest = m.armRest, seated = m.seated, freeHandL = m.freeHandL, freeHandR = m.freeHandR };
             rig.root = new GameObject(name).transform;
             rig.root.SetParent(parent, false);
             var renderers = new List<Renderer>();
@@ -228,7 +230,7 @@ namespace PastaSurvivors
 
         private static RigMeshes Humanoid(HumanSpec s, EnemyKind? kind)
         {
-            var m = new RigMeshes();
+            var m = new RigMeshes { freeHandL = s.heldL == Held.None, freeHandR = s.heldR == Held.None };
             // ---- legs (origin at hip)
             kit.Clear();
             float legLen = m.hipY;
@@ -305,9 +307,18 @@ namespace PastaSurvivors
             kit.Clear();
             var sleeve = s.jacket ?? s.shirt;
             kit.Bar(new Vector3(0, 0.02f, 0), new Vector3(0, -0.5f, 0), 0.15f, sleeve);
-            kit.Ball(new Vector3(0, -0.57f, 0.02f), 0.14f, s.skin);
-            // Pinched Italian fingers (🤌): a small cone on the hand.
-            kit.Cone(new Vector3(0, -0.66f, 0.03f), new Vector3(0.09f, 0.1f, 0.09f), s.skin, new Vector3(180, 0, 0), 0f, 6);
+            if (held == Held.None && s.angry)
+            {
+                // A joined fingertip cluster and thumb, palm up when the arm is raised to chest height.
+                kit.Ball(new Vector3(0, -0.57f, 0.02f), new Vector3(0.17f, 0.13f, 0.09f), s.skin);
+                kit.Cone(new Vector3(0, -0.63f, 0.08f), new Vector3(0.125f, 0.12f, 0.1f), s.skin, new Vector3(90, 0, 0), 0f, 6);
+                kit.Bar(new Vector3(left ? 0.075f : -0.075f, -0.545f, 0.045f), new Vector3(0, -0.63f, 0.135f), 0.045f, s.skin);
+            }
+            else
+            {
+                kit.Ball(new Vector3(0, -0.57f, 0.02f), 0.14f, s.skin);
+                kit.Cone(new Vector3(0, -0.66f, 0.03f), new Vector3(0.09f, 0.1f, 0.09f), s.skin, new Vector3(180, 0, 0), 0f, 6);
+            }
             var hand = new Vector3(0, -0.58f, 0.04f);
             switch (held)
             {

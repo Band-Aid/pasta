@@ -13,6 +13,14 @@ namespace PastaSurvivors
         public int Kills;
         public float HpMul = 1f, DamageMul = 1f, BossHpMul = 1f;
 
+        private float gesturePercent = 100f;
+        /// <summary>Session-wide crowd density. Read only when starting a new approach gesture.</summary>
+        public float GesturePercent
+        {
+            get => gesturePercent;
+            set => gesturePercent = float.IsNaN(value) ? 100f : Mathf.Clamp(value, 0f, 100f);
+        }
+
         private readonly Dictionary<EnemyKind, Stack<Enemy>> pools = new Dictionary<EnemyKind, Stack<Enemy>>();
         private readonly List<Enemy> scratch = new List<Enemy>(256);
         private Transform poolRoot;
@@ -72,6 +80,7 @@ namespace PastaSurvivors
             e.dominoTime = 0f;
             e.lift = 0f; e.spin = 0f; e.fleeT = 0f;
             e.gesture = UnityEngine.Random.value * 10f;
+            e.ResetApproachGesture();
             Array.Clear(e.immune, 0, e.immune.Length);
             e.SetFlash(false);
             var toPlayer = G.Player != null ? G.Player.Position - e.pos : Vector3.back;
@@ -205,8 +214,13 @@ namespace PastaSurvivors
                 Vector3 sep = Separation(e);
                 e.knock *= Mathf.Exp(-7f * dt);
                 Vector3 delta = (move + e.knock + e.dominoVel * (e.dominoTime > 0f ? 1f : 0f)) * dt + sep;
+                Vector3 beforeMove = e.pos;
                 e.pos += delta;
                 e.pos = G.Arena.Resolve(e.pos, e.radius);
+                bool approaching = player != null && e.los && dist > e.radius + pr + 0.8f && dist < 14f
+                    && Vector3.Dot(move, dirP) > 0.1f
+                    && Vector3.Dot(e.pos - beforeMove, dirP) > 0.05f * dt
+                    && Vector3.Dot(e.facing, dirP) > 0.65f;
                 if (move.sqrMagnitude > 0.01f && e.state != 2) e.facing = Vector3.Slerp(e.facing, move.normalized, 1f - Mathf.Exp(-10f * dt));
                 else if (e.state != 2 && dist > 0.1f) e.facing = Vector3.Slerp(e.facing, dirP, 1f - Mathf.Exp(-6f * dt));
 
@@ -219,7 +233,7 @@ namespace PastaSurvivors
 
                 e.lift = Mathf.MoveTowards(e.lift, 0f, dt * 4f);
                 e.ApplyTransform();
-                e.Animate(dt, move.magnitude);
+                e.Animate(dt, move.magnitude, approaching, GesturePercent);
             }
         }
 

@@ -21,6 +21,11 @@ namespace PastaSurvivors
         public string Current { get; private set; } = "";
         private float openedAt;
         private readonly List<RectTransform> pop = new List<RectTransform>();
+        private Slider gestureSlider;
+        private RectTransform gestureTrack, gestureClose;
+        private bool draggingGesture;
+        private System.Action closeGestureSettings;
+        public bool GestureSettingsOpen => Current == "gestures";
 
         public void Build(Transform parent)
         {
@@ -33,6 +38,9 @@ namespace PastaSurvivors
         public void Close()
         {
             Current = "";
+            gestureSlider = null;
+            draggingGesture = false;
+            closeGestureSettings = null;
             if (content != null) Destroy(content.gameObject);
             content = null;
             Nav.Clear();
@@ -62,6 +70,7 @@ namespace PastaSurvivors
         private void Update()
         {
             if (!Open) return;
+            if (GestureSettingsOpen) { UpdateGestureSettings(); return; }
             Nav.Update();
             float age = Time.unscaledTime - openedAt;
             if (age > 0.45f) return;
@@ -300,11 +309,68 @@ namespace PastaSurvivors
                 $"最大HP  {p.MaxHp:0}\nパワー  {p.Might * 100:0}%\n範囲  {p.AreaMul * 100:0}%\nクールダウン  {p.CooldownMul * 100:0}%\n" +
                 $"発射数  +{p.AmountBonus}\n移動速度  {p.MoveSpeed:0.0}\n回収範囲  {p.MagnetRadius:0.0}m\n成長  {p.GrowthMul * 100:0}%\n装甲  {p.Armor:0}\n復活  {p.Revivals}";
             UiKit.Label(c, "Stats", stats, 28, Color.white, TextAnchor.UpperLeft, new Vector2(0.5f, 0.5f), new Vector2(360, 40), new Vector2(400, 600), FontStyle.Normal);
-            Button(c, "再開", new Vector2(0.5f, 0f), new Vector2(-420, 110), new Vector2(380, 76), resume);
-            Button(c, "視点：" + (SaveData.FirstPerson ? "一人称" : "見下ろし"), new Vector2(0.5f, 0f), new Vector2(0, 110), new Vector2(380, 76), toggleView);
-            Button(c, "タイトルへ戻る", new Vector2(0.5f, 0f), new Vector2(420, 110), new Vector2(380, 76), quit);
-            Nav.columns = 3;
+            Button(c, "再開", new Vector2(0.5f, 0f), new Vector2(-480, 110), new Vector2(300, 76), resume);
+            Button(c, "視点：" + (SaveData.FirstPerson ? "一人称" : "見下ろし"), new Vector2(0.5f, 0f), new Vector2(-160, 110), new Vector2(300, 76), toggleView);
+            Button(c, "身振り設定", new Vector2(0.5f, 0f), new Vector2(160, 110), new Vector2(300, 76), () => G.Game.OpenGestureSettings());
+            Button(c, "タイトルへ戻る", new Vector2(0.5f, 0f), new Vector2(480, 110), new Vector2(300, 76), quit);
+            Nav.columns = 4;
             Nav.onCancel = resume;
+        }
+
+        public void ShowGestureSettings(System.Action close)
+        {
+            var c = Begin("gestures", 0f);
+            closeGestureSettings = close;
+            var panel = UiKit.Img(c, "GestureSettings", new Vector2(1f, 1f), new Vector2(-24, -118), new Vector2(560, 310), UiKit.Ink);
+            var label = UiKit.Label(panel.transform, "GesturePercent", "", 32, UiKit.Gold, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 1f), new Vector2(0, -38), new Vector2(520, 48));
+            UiKit.Label(panel.transform, "Scope", "徒歩の町の人（乗り物・ボスを除く）", 21, UiKit.Cream, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 1f), new Vector2(0, -80), new Vector2(520, 32));
+            gestureTrack = UiKit.Rect(panel.transform, "GestureSlider", new Vector2(0.5f, 1f), new Vector2(0, -116), new Vector2(480, 48));
+            UiKit.Img(gestureTrack, "Track", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(480, 10), new Color(0.35f, 0.3f, 0.25f));
+            var fill = UiKit.Fill(UiKit.Img(gestureTrack, "Fill", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(480, 10), UiKit.Gold));
+            var handle = UiKit.Img(gestureTrack, "Handle", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(24, 36), UiKit.Cream, null, new Vector2(0.5f, 0.5f));
+            gestureSlider = gestureTrack.gameObject.AddComponent<Slider>();
+            gestureSlider.navigation = new Navigation { mode = Navigation.Mode.None };
+            gestureSlider.transition = Selectable.Transition.None;
+            gestureSlider.minValue = 0f;
+            gestureSlider.maxValue = 100f;
+            gestureSlider.wholeNumbers = true;
+            gestureSlider.fillRect = fill.rectTransform;
+            gestureSlider.handleRect = handle.rectTransform;
+            gestureSlider.targetGraphic = handle;
+            gestureSlider.SetValueWithoutNotify(G.Enemies.GesturePercent);
+            label.text = $"身振り発生率  {gestureSlider.value:0}%";
+            gestureSlider.onValueChanged.AddListener(value =>
+            {
+                G.Enemies.GesturePercent = value;
+                label.text = $"身振り発生率  {value:0}%";
+            });
+            UiKit.Label(panel.transform, "Minimum", "0%", 20, UiKit.Cream, TextAnchor.MiddleLeft,
+                new Vector2(0f, 1f), new Vector2(40, -164), new Vector2(90, 30));
+            UiKit.Label(panel.transform, "Maximum", "100%", 20, UiKit.Cream, TextAnchor.MiddleRight,
+                new Vector2(1f, 1f), new Vector2(-40, -164), new Vector2(90, 30));
+            UiKit.Label(panel.transform, "Hint", "ドラッグ / ← → で調整・次の身振りから反映\n調整中もゲームは進行します", 20, UiKit.Cream, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 1f), new Vector2(0, -198), new Vector2(520, 50), FontStyle.Normal);
+            gestureClose = UiKit.Img(panel.transform, "Close", new Vector2(0.5f, 0f), new Vector2(0, 12), new Vector2(360, 44), new Color(0.35f, 0.2f, 0.12f)).rectTransform;
+            UiKit.Label(gestureClose, "Text", "閉じる（G / Esc / B）", 24, UiKit.Cream, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(350, 40));
+        }
+
+        private void UpdateGestureSettings()
+        {
+            if (Time.unscaledTime - openedAt < 0.25f) return;
+            // The existing menus poll input directly and do not use an EventSystem.
+            // Keep the slider on the same path, including drag capture outside the track.
+            var mouse = Controls.MousePosition;
+            if (Controls.MouseClicked && RectTransformUtility.RectangleContainsScreenPoint(gestureTrack, mouse, null))
+                draggingGesture = true;
+            if (!Controls.MouseMoveHeld) draggingGesture = false;
+            if (draggingGesture && RectTransformUtility.ScreenPointToLocalPointInRectangle(gestureTrack, mouse, null, out var local))
+                gestureSlider.value = Mathf.InverseLerp(gestureTrack.rect.xMin, gestureTrack.rect.xMax, local.x) * 100f;
+            gestureSlider.value += Controls.Nav().x;
+            if (Controls.Submit() || (Controls.MouseClicked && RectTransformUtility.RectangleContainsScreenPoint(gestureClose, mouse, null)))
+                closeGestureSettings?.Invoke();
         }
 
         public void ShowResult(bool cleared, int coinsEarned, Dictionary<int, float> damage, System.Action retry, System.Action next, System.Action title)

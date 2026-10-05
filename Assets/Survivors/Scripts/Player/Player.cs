@@ -220,23 +220,25 @@ namespace PastaSurvivors
         public void Tick(float dt)
         {
             if (!Alive) return;
-            Vector2 input = Controls.Move();
+            bool acceptInput = G.Game == null || !G.Game.GameplayInputBlocked;
+            if (!acceptInput) mouseMoveArmed = false;
+            Vector2 input = acceptInput ? Controls.Move() : Vector2.zero;
             Vector3 dir = new Vector3(input.x, 0f, input.y);
             if (dir.sqrMagnitude > 1f) dir.Normalize();
 
-            int sw = Controls.SwitchWeapon();
+            int sw = acceptInput ? Controls.SwitchWeapon() : 0;
             if (sw != 0 && Weapons.Count > 1) SetMain((MainIndex + sw + Weapons.Count) % Weapons.Count);
-            int slot = Controls.WeaponSlotKey();
+            int slot = acceptInput ? Controls.WeaponSlotKey() : -1;
             if (slot >= 0) SetMain(slot);
 
             if (FirstPerson)
             {
-                var look = Controls.Look();
+                var look = acceptInput ? Controls.Look() : Vector2.zero;
                 LookYaw = Mathf.Repeat(LookYaw + look.x, 360f);
                 LookPitch = Mathf.Clamp(LookPitch - look.y, -55f, 75f);
                 dir = Quaternion.Euler(0f, LookYaw, 0f) * dir;
             }
-            else
+            else if (acceptInput)
             {
                 UpdateTopDownAim(dt);
                 // Hold the left mouse button to walk toward the cursor.
@@ -251,10 +253,10 @@ namespace PastaSurvivors
 
             SpecialCd -= dt;
             BuffTime -= dt;
-            if (Controls.Special()) TryUseSpecial();
+            if (acceptInput && Controls.Special()) TryUseSpecial();
 
             dashCd -= dt;
-            if (Controls.Dash() && dashCd <= 0f)
+            if (acceptInput && Controls.Dash() && dashCd <= 0f)
             {
                 dashDir = dir.sqrMagnitude > 0.05f ? dir.normalized : Facing;
                 dashTime = 0.2f;

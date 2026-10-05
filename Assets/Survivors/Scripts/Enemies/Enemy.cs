@@ -26,6 +26,27 @@ namespace PastaSurvivors
         public int cell;
         public float lift, spin;
 
+        // Cosmetic randomness stays separate from combat/spawn randomness, including when pooled.
+        private System.Random gestureRandom;
+        private bool gestureRight;
+        private double gestureRoll;
+        private int gesturePattern;
+        private float gestureWait, gestureTime, gestureDuration;
+
+        public void ResetApproachGesture()
+        {
+            gestureRandom = new System.Random(unchecked(uid * 486187739 + 17));
+            // One fixed draw per spawned person, never re-rolled when the slider changes.
+            gestureRoll = gestureRandom.NextDouble();
+            gestureWait = GestureRange(0.15f, 1.2f);
+            gestureTime = gestureDuration = 0f;
+        }
+
+        private float GestureRange(float min, float max) => Mathf.Lerp(min, max, (float)gestureRandom.NextDouble());
+
+        public bool SelectedForGestures(float percent) => percent > 0f
+            && (percent >= 100f || gestureRoll < percent / 100.0);
+
         // Navigation: walking direction (flow field or straight line) and whether they can see/throw at the player.
         public Vector3 nav;
         public bool los = true, walkClear = true;
@@ -61,10 +82,20 @@ namespace PastaSurvivors
             }
         }
 
-        public void Animate(float dt, float moveSpeed)
+        public void Animate(float dt, float moveSpeed, bool approaching = false, float gesturePercent = 100f)
         {
             var r = rig;
-            if (r.torso == null) return;
+            if (r.torso == null || dt <= 0f) return;
+            bool canGesture = approaching && moveSpeed > 0.1f && active
+                && !frozen && !fleeing && fear <= 0f && stun <= 0f && flash <= 0f
+                && dominoTime <= 0f && knock.sqrMagnitude < 0.04f && state == 0
+                && !IsBoss && !IsProp && !r.seated && (r.freeHandL || r.freeHandR);
+            if (!canGesture)
+            {
+                // Never resume a half-finished gesture after an attack, hit or loss of approach.
+                if (gestureTime > 0f) gestureWait = GestureRange(0.8f, 1.8f);
+                gestureTime = 0f;
+            }
             float amp = Mathf.Clamp01(moveSpeed / 2f);
             bool panic = fleeing || fear > 0f;
             float rate = panic ? 22f : 5f + moveSpeed * 2.4f;
@@ -107,12 +138,46 @@ namespace PastaSurvivors
                 r.armR.localRotation = Quaternion.Euler(r.armRest, 0f, -8f);
                 return;
             }
-            // The Italian hand: pinched fingers raised and shaken in disbelief.
-            float pinch = Mathf.Sin(gesture * 17f + uid) * 14f;
             float swing = s * 28f * amp;
-            bool angryRight = ((uid + (int)(gesture * 0.6f)) & 1) == 0;
-            r.armL.localRotation = Quaternion.Euler(angryRight ? r.armRest - swing : -95f + pinch, 0f, angryRight ? -4f : -12f);
-            r.armR.localRotation = Quaternion.Euler(angryRight ? -95f + pinch : r.armRest + swing, 0f, angryRight ? 12f : 4f);
+            r.armL.localRotation = Quaternion.Euler(r.armRest - swing, 0f, -4f);
+            r.armR.localRotation = Quaternion.Euler(r.armRest + swing, 0f, 4f);
+            if (canGesture) AnimateApproachGesture(dt, gesturePercent);
+        }
+
+        private void AnimateApproachGesture(float dt, float gesturePercent)
+        {
+            if (gestureTime <= 0f)
+            {
+                gestureWait -= dt;
+                if (gestureWait > 0f) return;
+                // Density only gates the next start. An in-progress gesture still finishes
+                // naturally unless combat or loss of approach interrupts it above.
+                if (!SelectedForGestures(gesturePercent)) return;
+                gesturePattern = gestureRandom.Next(3);
+                gestureRight = rig.freeHandR && (!rig.freeHandL || gestureRandom.Next(2) == 0);
+                gestureDuration = GestureRange(0.95f, 1.25f);
+            }
+            gestureTime += dt;
+            if (gestureTime >= gestureDuration)
+            {
+                gestureTime = 0f;
+                gestureWait = GestureRange(0.8f, 1.8f);
+                return;
+            }
+
+            // Broad, quick shoulder-height motions with a readable 0.14s held pose.
+            float phase = Mathf.Clamp01((gestureTime - 0.12f) / (gestureDuration - 0.46f));
+            float wave = Mathf.Sin(phase * Mathf.PI * 4f);
+            float side = gestureRight ? 1f : -1f;
+            float pitch = -110f, yaw = -side * 18f;
+            if (gesturePattern == 0) pitch += wave * 33f;
+            else if (gesturePattern == 1) yaw += wave * 36f;
+            else pitch -= Mathf.Sin(phase * Mathf.PI * 2f) * 36f;
+
+            float weight = Mathf.SmoothStep(0f, 1f, gestureTime / 0.12f)
+                * Mathf.SmoothStep(0f, 1f, (gestureDuration - gestureTime) / 0.2f);
+            var arm = gestureRight ? rig.armR : rig.armL;
+            arm.localRotation = Quaternion.Slerp(arm.localRotation, Quaternion.Euler(pitch, yaw, side * 24f), weight);
         }
     }
 }
