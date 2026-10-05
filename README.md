@@ -134,6 +134,8 @@
 
 ## 検証
 
+身振りの専用検証：Unityメニュー **Pasta Survivors → Verify Enemy Gestures**（`PastaSurvivors.EditorTools.EnemyGestureVerification.Check`）。スライダーの接続、0/25/50/75/100%、固定された対象者、次回開始への反映、攻撃・被弾の割り込み、空き手制限、歩行と戦闘データの維持を確認する。
+
 開発版を以下で起動すると自動テストが走り、`output/Survivors/Verification/` に結果とスクリーンショットを保存する。テスト用のセーブ枠を使うので、普段のセーブデータには影響しない。
 
 ```text
