@@ -234,10 +234,10 @@ namespace PastaSurvivors
                 },
                 new WeaponDef
                 {
-                    id = WeaponId.CarbonaraAura, mainTrait = "主武器：当てるたびにHP回復（ピンチの立て直しに）", name = "生クリームカルボナーラ", icon = "carbonara", evoIcon = "cream",
+                    id = WeaponId.CarbonaraAura, mainTrait = "主武器：命中時にHP回復（攻撃1回につき最大1.5HP）", name = "生クリームカルボナーラ", icon = "carbonara", evoIcon = "cream",
                     desc = "カルボナーラに生クリーム!? 周囲のイタリア人にダメージを与え続ける。",
                     evoName = "クリーム地獄", evoPartner = PassiveId.RecipeBook,
-                    evoDesc = "範囲が広がり、当たるたびにHPが少し回復。敵を遅くする。",
+                    evoDesc = "範囲が広がり、命中時にHP回復（攻撃1回につき最大1.5HP）。敵を遅くする。",
                     baseStats = S(dmg: 5, cd: 0.9f, area: 1f, kb: 0.6f, amt: 1),
                     evoBonus = S(dmg: 4, area: 0.4f),
                     levels = new[] { S(dmg: 2, area: 0.1f), S(cd: -0.1f), S(area: 0.15f), S(dmg: 2), S(cd: -0.1f), S(area: 0.15f), S(dmg: 3) },

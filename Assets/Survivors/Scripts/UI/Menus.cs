@@ -311,7 +311,7 @@ namespace PastaSurvivors
             UiKit.Label(c, "Stats", stats, 28, Color.white, TextAnchor.UpperLeft, new Vector2(0.5f, 0.5f), new Vector2(360, 40), new Vector2(400, 600), FontStyle.Normal);
             Button(c, "再開", new Vector2(0.5f, 0f), new Vector2(-480, 110), new Vector2(300, 76), resume);
             Button(c, "視点：" + (SaveData.FirstPerson ? "一人称" : "見下ろし"), new Vector2(0.5f, 0f), new Vector2(-160, 110), new Vector2(300, 76), toggleView);
-            Button(c, "身振り設定", new Vector2(0.5f, 0f), new Vector2(160, 110), new Vector2(300, 76), () => G.Game.OpenGestureSettings());
+            Button(c, "身振り設定（再開）", new Vector2(0.5f, 0f), new Vector2(160, 110), new Vector2(300, 76), () => G.Game.OpenGestureSettings(), 28);
             Button(c, "タイトルへ戻る", new Vector2(0.5f, 0f), new Vector2(480, 110), new Vector2(300, 76), quit);
             Nav.columns = 4;
             Nav.onCancel = resume;
@@ -323,9 +323,9 @@ namespace PastaSurvivors
             closeGestureSettings = close;
             var panel = UiKit.Img(c, "GestureSettings", new Vector2(1f, 1f), new Vector2(-24, -118), new Vector2(560, 310), UiKit.Ink);
             var label = UiKit.Label(panel.transform, "GesturePercent", "", 32, UiKit.Gold, TextAnchor.MiddleCenter,
-                new Vector2(0.5f, 1f), new Vector2(0, -38), new Vector2(520, 48));
+                new Vector2(0.5f, 1f), new Vector2(0, -20), new Vector2(520, 48));
             UiKit.Label(panel.transform, "Scope", "徒歩の町の人（乗り物・ボスを除く）", 21, UiKit.Cream, TextAnchor.MiddleCenter,
-                new Vector2(0.5f, 1f), new Vector2(0, -80), new Vector2(520, 32));
+                new Vector2(0.5f, 1f), new Vector2(0, -74), new Vector2(520, 32));
             gestureTrack = UiKit.Rect(panel.transform, "GestureSlider", new Vector2(0.5f, 1f), new Vector2(0, -116), new Vector2(480, 48));
             UiKit.Img(gestureTrack, "Track", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(480, 10), new Color(0.35f, 0.3f, 0.25f));
             var fill = UiKit.Fill(UiKit.Img(gestureTrack, "Fill", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(480, 10), UiKit.Gold));

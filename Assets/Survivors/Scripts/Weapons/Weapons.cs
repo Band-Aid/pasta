@@ -419,7 +419,7 @@ namespace PastaSurvivors
 
     public class CarbonaraAura : Weapon
     {
-        private float healBudget;
+        private const float HealPerHit = 0.35f, MaxHealPerAttack = 1.5f;
 
         public float Radius => 2.2f * Area(Raw) * (evolved ? 1f : 1f);
 
@@ -428,13 +428,20 @@ namespace PastaSurvivors
             float radius = 2.2f * Area(s);
             int n = G.Enemies.Query(P.Position, radius, hits);
             float dmg = Dmg(s);
-            healBudget = 2f;
+            bool canHeal = evolved || IsMain;
+            float healBudget = MaxHealPerAttack;
             for (int i = 0; i < n; i++)
             {
                 var e = hits[i];
                 G.Enemies.Damage(e, dmg, e.pos - P.Position, s.knockback, Slot);
                 if (evolved) e.slow = Mathf.Max(e.slow, 0.6f);
-                if ((evolved || IsMain) && healBudget > 0f) { P.Heal(0.35f, false); healBudget -= 0.35f; }
+                if (canHeal && healBudget > 0f)
+                {
+                    // Keep healing on every hit (including props), but cap the total exactly.
+                    float healing = Mathf.Min(HealPerHit, healBudget);
+                    P.Heal(healing, false);
+                    healBudget -= healing;
+                }
             }
         }
 
