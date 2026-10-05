@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace PastaSurvivors.EditorTools
 {
@@ -57,19 +58,130 @@ namespace PastaSurvivors.EditorTools
                     UnityEngine.Object.DestroyImmediate(a.rig.root.gameObject);
                     UnityEngine.Object.DestroyImmediate(b.rig.root.gameObject);
                 }
-                Require(gesturing > 0 && quiet > 0 && patterns.Count == 3, "Crowd contains quiet individuals and all three patterns");
+                Require(gesturing == 32 && quiet == 0 && patterns.Count == 3, "100% includes every towns-person and all three patterns");
                 CheckInterruptions(root.transform);
+                CheckDensity(root.transform);
+                CheckDensityDuringGesture(root.transform);
                 // Sampling the cosmetic layer must never consume the gameplay random stream.
                 float actual = UnityEngine.Random.value;
                 UnityEngine.Random.state = randomState;
                 Require(actual == UnityEngine.Random.value, "Gameplay randomness is unchanged");
-                Debug.Log("ENEMY_GESTURE_CHECKS_PASSED: patterns, free hands, walk/combat isolation, interruptions, pause and reuse");
+                Debug.Log("ENEMY_GESTURE_CHECKS_PASSED: slider wiring, 0/25/50/75/100%, stable nested cohorts, next-start changes, patterns, free hands, walk/combat isolation, interruptions, pause and reuse");
             }
             finally
             {
                 UnityEngine.Random.state = randomState;
                 UnityEngine.Object.DestroyImmediate(root);
             }
+        }
+
+        private static void CheckDensity(Transform parent)
+        {
+            var previousManager = G.Enemies;
+            var ui = new GameObject("Density settings check");
+            ui.transform.SetParent(parent, false);
+            var manager = ui.AddComponent<EnemyManager>();
+            var a = Create(EnemyKind.Signore, parent);
+            var baseline = Create(EnemyKind.Signore, parent);
+            try
+            {
+                G.Enemies = manager;
+                Require(manager.GesturePercent == 100f, "Density defaults to 100%");
+                UiKit.Init();
+                var menus = ui.AddComponent<Menus>();
+                menus.Build(ui.transform);
+                menus.ShowGestureSettings(() => { });
+                var slider = ui.GetComponentInChildren<Slider>();
+                Require(slider != null && slider.minValue == 0f && slider.maxValue == 100f
+                    && slider.value == 100f && slider.wholeNumbers, "Visible slider has 0-100% range and 100% default");
+                float[] rates = { 0f, 25f, 50f, 75f, 100f };
+                var counts = new int[rates.Length];
+                const int population = 256;
+                for (int uid = 1; uid <= population; uid++)
+                {
+                    bool previouslySelected = false;
+                    for (int rate = 0; rate < rates.Length; rate++)
+                    {
+                        Reset(a, uid); Reset(baseline, uid);
+                        slider.value = rates[rate];
+                        Require(manager.GesturePercent == rates[rate], "Dragging slider updates runtime density");
+                        bool selected = a.SelectedForGestures(manager.GesturePercent);
+                        Require(!previouslySelected || selected, "Increasing density only adds people");
+                        previouslySelected = selected;
+                        if (selected) counts[rate]++;
+                        bool seen = false;
+                        for (int frame = 0; frame < 160; frame++)
+                        {
+                            a.Animate(Dt, 2f, true, manager.GesturePercent);
+                            baseline.Animate(Dt, 2f, false);
+                            seen |= Different(a.rig.armL, baseline.rig.armL) || Different(a.rig.armR, baseline.rig.armR);
+                        }
+                        Require(seen == selected, "Only selected people start gestures at " + rates[rate] + "%");
+                        slider.value = 100f;
+                        slider.value = 0f;
+                        slider.value = rates[rate];
+                        Require(a.SelectedForGestures(manager.GesturePercent) == selected,
+                            "Returning to a percentage preserves membership after animation and slider changes");
+                    }
+                }
+                Require(counts[0] == 0 && counts[4] == population, "0% selects nobody and 100% selects everybody");
+                for (int i = 1; i < 4; i++)
+                    Require(Mathf.Abs(counts[i] / (float)population - rates[i] / 100f) < 0.08f,
+                        "Intermediate density follows the requested proportion");
+                Debug.Log("GESTURE_DENSITY_COUNTS (0/25/50/75/100% of 256): " + string.Join(", ", counts));
+                manager.GesturePercent = -10f;
+                Require(manager.GesturePercent == 0f, "Density clamps below zero");
+                manager.GesturePercent = 110f;
+                Require(manager.GesturePercent == 100f, "Density clamps above 100%");
+            }
+            finally
+            {
+                G.Enemies = previousManager;
+                UnityEngine.Object.DestroyImmediate(ui);
+                UnityEngine.Object.DestroyImmediate(a.rig.root.gameObject);
+                UnityEngine.Object.DestroyImmediate(baseline.rig.root.gameObject);
+            }
+        }
+
+        private static void CheckDensityDuringGesture(Transform parent)
+        {
+            var a = Create(EnemyKind.Mamma, parent);
+            var b = Create(EnemyKind.Mamma, parent);
+            Reset(a, 1); Reset(b, 1);
+            var timer = typeof(Enemy).GetField("gestureTime", BindingFlags.Instance | BindingFlags.NonPublic);
+            for (int frame = 0; frame < 180 && (float)timer.GetValue(a) < 0.25f; frame++)
+            {
+                a.Animate(Dt, 2f, true, 100f);
+                b.Animate(Dt, 2f, true, 100f);
+            }
+            Require((float)timer.GetValue(a) >= 0.25f, "Gesture started before changing density");
+            int remainingFrames = 0;
+            do
+            {
+                a.Animate(Dt, 2f, true, 0f);
+                b.Animate(Dt, 2f, true, 100f);
+                Require(!Different(a.rig.armL, b.rig.armL) && !Different(a.rig.armR, b.rig.armR),
+                    "Dropping density does not cancel or change an in-progress gesture");
+                Require(++remainingFrames < 120, "In-progress gesture finishes naturally");
+            } while ((float)timer.GetValue(a) > 0f);
+            for (int frame = 0; frame < 240; frame++)
+            {
+                a.Animate(Dt, 2f, true, 0f);
+                Require((float)timer.GetValue(a) == 0f, "0% prevents every subsequent gesture start");
+            }
+            a.Animate(Dt, 2f, true, 100f);
+            Require((float)timer.GetValue(a) > 0f, "Raising density takes effect at the next eligible start without respawning");
+            a.state = 1;
+            a.Animate(Dt, 2f, true, 0f);
+            Require((float)timer.GetValue(a) == 0f, "Attack still interrupts a gesture after density changes");
+            a.state = 0;
+            for (int frame = 0; frame < 180 && (float)timer.GetValue(a) <= 0f; frame++) a.Animate(Dt, 2f, true, 100f);
+            Require((float)timer.GetValue(a) > 0f, "Gesture restarts after attack recovery");
+            a.flash = 1f;
+            a.Animate(Dt, 2f, true, 0f);
+            Require((float)timer.GetValue(a) == 0f, "Being hit still interrupts a gesture after density changes");
+            UnityEngine.Object.DestroyImmediate(a.rig.root.gameObject);
+            UnityEngine.Object.DestroyImmediate(b.rig.root.gameObject);
         }
 
         private static void CheckInterruptions(Transform parent)

@@ -69,7 +69,7 @@ namespace PastaSurvivors
             mainFrame = UiKit.Img(root, "MainFrame", new Vector2(0f, 1f), new Vector2(14, -36), new Vector2(60, 60), new Color(1f, 0.8f, 0.3f, 0.95f), UiKit.Round, new Vector2(0f, 1f));
             mainFrame.transform.SetSiblingIndex(0);
             mainTag = UiKit.Label(mainFrame.transform, "Tag", "主", 16, new Color(0.25f, 0.12f, 0.02f), TextAnchor.UpperLeft, new Vector2(0f, 1f), new Vector2(3, 1), new Vector2(30, 22), FontStyle.Bold, false, new Vector2(0f, 1f));
-            switchHint = UiKit.Label(root, "SwitchHint", "Q/E・ホイール・LB/RB 主武器切替　V 視点　左クリック長押し 移動", 17, new Color(1f, 1f, 1f, 0.6f), TextAnchor.UpperLeft, new Vector2(0f, 1f), new Vector2(20, -154), new Vector2(560, 26), FontStyle.Normal, true, new Vector2(0f, 1f));
+            switchHint = UiKit.Label(root, "SwitchHint", "Q/E 主武器切替　V 視点　G/R3 身振り設定　左クリック長押し 移動", 17, new Color(1f, 1f, 1f, 0.6f), TextAnchor.UpperLeft, new Vector2(0f, 1f), new Vector2(20, -154), new Vector2(600, 26), FontStyle.Normal, true, new Vector2(0f, 1f));
             mainText = UiKit.Label(root, "MainText", "", 24, UiKit.Gold, TextAnchor.UpperLeft, new Vector2(0f, 1f), new Vector2(20, -182), new Vector2(380, 120), FontStyle.Bold, true, new Vector2(0f, 1f));
 
             // First person: crosshair and a radar for Italians sneaking up from behind.

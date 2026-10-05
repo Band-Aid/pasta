@@ -25,6 +25,9 @@ namespace PastaSurvivors
         private float bossDefeatedAt = -1f;
         private readonly Dictionary<int, float> damage = new Dictionary<int, float>();
         private bool ending;
+        private int gestureSettingsClosedFrame = -1;
+        public bool GameplayInputBlocked => (Menus != null && Menus.GestureSettingsOpen)
+            || Time.frameCount == gestureSettingsClosedFrame;
 
         private void Awake()
         {
@@ -192,7 +195,7 @@ namespace PastaSurvivors
 
         private void UpdateCursor()
         {
-            bool playing = State == GameState.Playing && Application.isFocused;
+            bool playing = State == GameState.Playing && Application.isFocused && !GameplayInputBlocked;
             // First person locks the mouse for looking; top-down keeps it in the window and swaps it for a ground reticle.
             var mode = !playing ? CursorLockMode.None : SaveData.FirstPerson ? CursorLockMode.Locked : CursorLockMode.Confined;
             if (Cursor.lockState != mode) Cursor.lockState = mode;
@@ -234,8 +237,18 @@ namespace PastaSurvivors
 
         private void TickPlaying()
         {
-            if (Controls.Pause()) { Pause(); return; }
-            if (Controls.ToggleView()) ToggleViewMode();
+            if (Controls.GestureSettings())
+            {
+                if (Menus.GestureSettingsOpen) CloseGestureSettings();
+                else OpenGestureSettings();
+            }
+            if (Menus.GestureSettingsOpen)
+            {
+                if (Controls.Pause() || Controls.Cancel()) CloseGestureSettings();
+            }
+            else if (!GameplayInputBlocked && Controls.Pause()) { Pause(); return; }
+            if (!GameplayInputBlocked && Controls.ToggleView()) ToggleViewMode();
+            UpdateCursor();
             float dt = Time.deltaTime;
             G.RunTime += dt;
             if (bossDefeatedAt < 0f) G.Waves.Tick(dt, G.RunTime);
@@ -264,10 +277,24 @@ namespace PastaSurvivors
         private void OnApplicationFocus(bool focus)
         {
             if (!focus && AutoPauseOnFocusLoss && State == GameState.Playing) Pause();
-            if (focus && State == GameState.Playing && SaveData.FirstPerson) Cursor.lockState = CursorLockMode.Locked;
+            if (focus) UpdateCursor();
         }
 
         // ---------------- pause / level up / chest ----------------
+
+        public void OpenGestureSettings()
+        {
+            if (State == GameState.Paused) Resume();
+            if (State != GameState.Playing) return;
+            Menus.ShowGestureSettings(CloseGestureSettings);
+            UpdateCursor();
+        }
+
+        public void CloseGestureSettings()
+        {
+            Menus.Close();
+            gestureSettingsClosedFrame = Time.frameCount;
+        }
 
         public void Pause()
         {

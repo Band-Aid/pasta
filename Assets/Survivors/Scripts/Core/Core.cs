@@ -72,6 +72,13 @@ namespace PastaSurvivors
             return false;
         }
 
+        public static bool GestureSettings()
+        {
+            if (Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame) return true;
+            foreach (var pad in Gamepad.all) if (pad.rightStickButton.wasPressedThisFrame) return true;
+            return false;
+        }
+
         public static bool Submit()
         {
             var kb = Keyboard.current;

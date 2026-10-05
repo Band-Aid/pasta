@@ -13,6 +13,14 @@ namespace PastaSurvivors
         public int Kills;
         public float HpMul = 1f, DamageMul = 1f, BossHpMul = 1f;
 
+        private float gesturePercent = 100f;
+        /// <summary>Session-wide crowd density. Read only when starting a new approach gesture.</summary>
+        public float GesturePercent
+        {
+            get => gesturePercent;
+            set => gesturePercent = float.IsNaN(value) ? 100f : Mathf.Clamp(value, 0f, 100f);
+        }
+
         private readonly Dictionary<EnemyKind, Stack<Enemy>> pools = new Dictionary<EnemyKind, Stack<Enemy>>();
         private readonly List<Enemy> scratch = new List<Enemy>(256);
         private Transform poolRoot;
@@ -225,7 +233,7 @@ namespace PastaSurvivors
 
                 e.lift = Mathf.MoveTowards(e.lift, 0f, dt * 4f);
                 e.ApplyTransform();
-                e.Animate(dt, move.magnitude, approaching);
+                e.Animate(dt, move.magnitude, approaching, GesturePercent);
             }
         }
 
