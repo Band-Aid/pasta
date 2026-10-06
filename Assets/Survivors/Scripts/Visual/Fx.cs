@@ -92,7 +92,7 @@ namespace PastaSurvivors
         {
             if (reticle.activeSelf != show) reticle.SetActive(show);
             if (!show) return;
-            reticle.transform.SetPositionAndRotation(new Vector3(pos.x, 0.08f, pos.z), Quaternion.Euler(0f, Time.unscaledTime * 90f, 0f));
+            reticle.transform.SetPositionAndRotation(G.Arena.OnGround(pos) + Vector3.up * 0.08f, Quaternion.Euler(0f, Time.unscaledTime * 90f, 0f));
         }
 
         private ParticleSystem MakeSystem(string name, Material mat, Mesh mesh, float gravity)
@@ -291,7 +291,7 @@ namespace PastaSurvivors
             dir.y = 0f;
             if (dir.sqrMagnitude < 0.001f) dir = Vector3.forward;
             var rot = Quaternion.LookRotation(dir);
-            var basePos = new Vector3(pos.x, 0.07f, pos.z);
+            var basePos = G.Arena.OnGround(pos) + Vector3.up * 0.07f;
             for (int layer = 0; layer < 2; layer++)
             {
                 var f = Get(key, false);
@@ -309,7 +309,7 @@ namespace PastaSurvivors
             if (radius <= 0f) { aura.SetActive(false); return; }
             if (!aura.activeSelf) aura.SetActive(true);
             float pulse = 1f + Mathf.Sin(Time.time * 5f) * 0.03f;
-            aura.transform.SetPositionAndRotation(new Vector3(pos.x, 0.05f, pos.z), Quaternion.Euler(0, Time.time * 30f, 0));
+            aura.transform.SetPositionAndRotation(G.Arena.OnGround(pos) + Vector3.up * 0.05f, Quaternion.Euler(0, Time.time * 30f, 0));
             aura.transform.localScale = new Vector3(radius * pulse, 1f, radius * pulse);
             mpb.SetColor("_BaseColor", evolved ? new Color(1f, 0.92f, 0.55f, 0.32f) : new Color(1f, 0.97f, 0.85f, 0.22f));
             auraRenderer.SetPropertyBlock(mpb);

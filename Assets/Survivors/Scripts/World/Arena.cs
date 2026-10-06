@@ -25,11 +25,40 @@ namespace PastaSurvivors
         public const float HealCapacity = 45f, HealRefill = 0.5f;
         public struct Road { public Vector3 a, b; public float width; }
 
+        /// <summary>The same piecewise-linear arch is used for the rendered deck and its walking surface.</summary>
+        public struct BridgeSurface
+        {
+            public const int Segments = 24;
+            public Vector3 center;
+            public Vector2 size;
+            public float rise;
+            public bool AlongX => size.x >= size.y;
+            public float Length => AlongX ? size.x : size.y;
+            public float Width => AlongX ? size.y : size.x;
+            public float Along(Vector3 p) => AlongX ? p.x - center.x : p.z - center.z;
+            public bool Contains(Vector3 p) => Mathf.Abs(p.x - center.x) <= size.x * 0.5f
+                && Mathf.Abs(p.z - center.z) <= size.y * 0.5f;
+
+            public float NodeHeight(int node)
+            {
+                float u = 2f * node / Segments - 1f;
+                return center.y + rise * (1f - u * u);
+            }
+
+            public float Height(Vector3 p)
+            {
+                float t = Mathf.Clamp01(Along(p) / Length + 0.5f) * Segments;
+                int node = Mathf.Min(Mathf.FloorToInt(t), Segments - 1);
+                return Mathf.Lerp(NodeHeight(node), NodeHeight(node + 1), t - node);
+            }
+        }
+
         public Vector2 min, max;
         public readonly List<Obstacle> obstacles = new List<Obstacle>();
         public readonly List<Wall> walls = new List<Wall>();
         public readonly List<Area> areas = new List<Area>();
         public readonly List<Road> roads = new List<Road>();
+        private readonly List<BridgeSurface> bridges = new List<BridgeSurface>();
         /// <summary>Pedestals where special weapons appear.</summary>
         public readonly List<Vector3> specialSpots = new List<Vector3>();
         public bool ashRain;
@@ -48,6 +77,56 @@ namespace PastaSurvivors
         /// <summary>Water blocks walking but not throws or sight.</summary>
         public void AddWater(Vector3 center, Vector2 size)
             => walls.Add(new Wall { min = new Vector2(center.x, center.z) - size * 0.5f, max = new Vector2(center.x, center.z) + size * 0.5f, water = true });
+
+        public BridgeSurface AddBridge(Vector3 center, Vector2 size, float rise)
+        {
+            var bridge = new BridgeSurface { center = center, size = size, rise = rise };
+            bridges.Add(bridge);
+            return bridge;
+        }
+
+        public float GroundHeight(Vector3 p)
+        {
+            float height = 0f;
+            foreach (var bridge in bridges)
+                if (bridge.Contains(p)) height = Mathf.Max(height, bridge.Height(p));
+            return height;
+        }
+
+        public Vector3 OnGround(Vector3 p)
+        {
+            p.y = GroundHeight(p);
+            return p;
+        }
+
+        /// <summary>Pick the closest walking surface, so mouse movement/aiming also works on raised bridges.</summary>
+        public bool RaycastGround(Ray ray, out Vector3 point)
+        {
+            float nearest = float.PositiveInfinity;
+            if (ray.direction.y < -0.0001f && ray.origin.y >= 0f)
+                nearest = -ray.origin.y / ray.direction.y;
+            foreach (var bridge in bridges)
+            {
+                float step = bridge.Length / BridgeSurface.Segments;
+                float origin = bridge.Along(ray.origin);
+                float direction = bridge.AlongX ? ray.direction.x : ray.direction.z;
+                for (int i = 0; i < BridgeSurface.Segments; i++)
+                {
+                    float start = -bridge.Length * 0.5f + i * step;
+                    float slope = (bridge.NodeHeight(i + 1) - bridge.NodeHeight(i)) / step;
+                    float denominator = ray.direction.y - slope * direction;
+                    if (Mathf.Abs(denominator) < 0.0001f) continue;
+                    float t = (bridge.NodeHeight(i) + slope * (origin - start) - ray.origin.y) / denominator;
+                    if (t < 0f || t >= nearest) continue;
+                    var hit = ray.GetPoint(t);
+                    float along = bridge.Along(hit);
+                    if (bridge.Contains(hit) && along >= start - 0.0001f && along <= start + step + 0.0001f)
+                        nearest = t;
+                }
+            }
+            point = float.IsPositiveInfinity(nearest) ? Vector3.zero : ray.GetPoint(nearest);
+            return !float.IsPositiveInfinity(nearest);
+        }
 
         public Area AddArea(AreaKind kind, Vector3 c, float r, string name)
         {
@@ -160,7 +239,7 @@ namespace PastaSurvivors
                     else p.z = w.max.y + r;
                 }
             }
-            return Clamp(p, r);
+            return OnGround(Clamp(p, r));
         }
 
         /// <summary>True if a thrown object at this point hits cover.</summary>
