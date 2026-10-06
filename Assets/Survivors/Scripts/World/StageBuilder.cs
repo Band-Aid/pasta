@@ -689,10 +689,14 @@ namespace PastaSurvivors
             }
 
             // Inner canals split the square into islands; bridges are the choke points.
-            Canal(new Vector3(0f, 0f, -28.5f), new Vector2(7f, 15f));
-            Canal(new Vector3(0f, 0f, -9.5f), new Vector2(7f, 15f));
-            Canal(new Vector3(0f, 0f, 9.5f), new Vector2(7f, 15f));
-            Canal(new Vector3(0f, 0f, 28.5f), new Vector2(7f, 15f));
+            foreach (float z in new[] { -28.5f, -9.5f, 9.5f, 28.5f })
+            {
+                var center = new Vector3(0f, 0f, z);
+                Canal(center, new Vector2(7f, 15f));
+                // Keep the hull and raised ends (under 10 m long) inside each 15 m water span,
+                // clear of the bridge decks, railings and the quays at the ends of the canal.
+                Gondola(center + Vector3.up * 0.05f, 0f);
+            }
             Canal(new Vector3(-40f, 0f, 11f), new Vector2(20f, 4f));
             Canal(new Vector3(-14.75f, 0f, 11f), new Vector2(22.5f, 4f));
             Canal(new Vector3(13.75f, 0f, -11f), new Vector2(20.5f, 4f));
@@ -702,7 +706,6 @@ namespace PastaSurvivors
             Bridge(new Vector3(0f, 0f, 19f), new Vector2(8f, 4f));
             Bridge(new Vector3(-28f, 0f, 11f), new Vector2(4f, 5f));
             Bridge(new Vector3(26f, 0f, -11f), new Vector2(4f, 5f));
-            for (float z = -32; z <= 32; z += 16f) Gondola(new Vector3(0f, 0.05f, z + 4f), 0f);
 
             // North-west island: the Rialto market.
             MarketArea(new Vector3(-24f, 0f, 24f), 10f, "リアルト市場");
