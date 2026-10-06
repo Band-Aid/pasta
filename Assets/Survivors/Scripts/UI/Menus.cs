@@ -276,17 +276,21 @@ namespace PastaSurvivors
             var c = Begin("chest", 0.7f);
             bool evo = rewards.Exists(r => r.kind == Offer.Kind.Evolve);
             UiKit.Label(c, "T", evo ? "進化！" : "宝箱を開けた！", 84, evo ? new Color(1f, 0.6f, 0.3f) : UiKit.Gold, TextAnchor.MiddleCenter, new Vector2(0.5f, 1f), new Vector2(0, -140), new Vector2(1200, 110));
+            // Reserve the bottom of the screen for OK even when a chest gives five rewards.
+            float top = rewards.Count > 3 ? 220f : 150f;
             for (int i = 0; i < rewards.Count; i++)
             {
                 var o = rewards[i];
-                var row = UiKit.Img(c, o.title, new Vector2(0.5f, 0.5f), new Vector2(0, 150 - i * 140), new Vector2(900, 120), o.kind == Offer.Kind.Evolve ? new Color(0.4f, 0.2f, 0.05f, 0.96f) : new Color(0.16f, 0.11f, 0.1f, 0.96f));
+                var row = UiKit.Img(c, o.title, new Vector2(0.5f, 0.5f), new Vector2(0, top - i * 120), new Vector2(900, 110), o.kind == Offer.Kind.Evolve ? new Color(0.4f, 0.2f, 0.05f, 0.96f) : new Color(0.16f, 0.11f, 0.1f, 0.96f));
                 UiKit.Img(row.transform, "Icon", new Vector2(0f, 0.5f), new Vector2(24, 0), new Vector2(88, 88), Color.white, Icons.Get(o.icon), new Vector2(0f, 0.5f));
-                UiKit.Label(row.transform, "Name", o.title, 36, Color.white, TextAnchor.MiddleLeft, new Vector2(0f, 1f), new Vector2(136, -10), new Vector2(520, 44), FontStyle.Bold, true, new Vector2(0f, 1f));
+                UiKit.Label(row.transform, "Name", o.title, 36, Color.white, TextAnchor.MiddleLeft, new Vector2(0f, 1f), new Vector2(136, -8), new Vector2(520, 44), FontStyle.Bold, true, new Vector2(0f, 1f));
                 UiKit.Label(row.transform, "Tag", o.tag, 28, o.tagColor, TextAnchor.MiddleRight, new Vector2(1f, 1f), new Vector2(-24, -12), new Vector2(280, 40), FontStyle.Bold, true, new Vector2(1f, 1f));
-                UiKit.Label(row.transform, "Desc", o.desc, 24, UiKit.Cream, TextAnchor.UpperLeft, new Vector2(0f, 1f), new Vector2(136, -60), new Vector2(740, 56), FontStyle.Normal, true, new Vector2(0f, 1f));
+                UiKit.Label(row.transform, "Desc", o.desc, 24, UiKit.Cream, TextAnchor.UpperLeft, new Vector2(0f, 1f), new Vector2(136, -54), new Vector2(740, 50), FontStyle.Normal, true, new Vector2(0f, 1f));
                 pop.Add(row.rectTransform);
             }
             Button(c, "OK", new Vector2(0.5f, 0f), new Vector2(0, 110), new Vector2(360, 76), done);
+            UiKit.Label(c, "ResumeHint", "クリック / Enter / Space / Esc で再開", 24, UiKit.Cream, TextAnchor.MiddleCenter, new Vector2(0.5f, 0f), new Vector2(0, 50), new Vector2(900, 40));
+            Nav.onCancel = done;
             Nav.Arm(0.6f);
         }
 
