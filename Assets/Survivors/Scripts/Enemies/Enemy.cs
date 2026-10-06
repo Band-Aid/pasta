@@ -84,6 +84,8 @@ namespace PastaSurvivors
 
         public void ApplyTransform()
         {
+            // Spawned, fleeing and recycled actors also follow the raised walking surface.
+            if (G.Arena != null) pos.y = G.Arena.GroundHeight(pos);
             var t = rig.root;
             t.position = pos + Vector3.up * lift;
             if (facing.sqrMagnitude > 0.0001f)

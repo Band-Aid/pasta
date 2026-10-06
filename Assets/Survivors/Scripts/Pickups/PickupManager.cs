@@ -63,7 +63,7 @@ namespace PastaSurvivors
             }
             p.kind = kind;
             p.value = value;
-            p.pos = new Vector3(pos.x, 0f, pos.z);
+            p.pos = G.Arena.OnGround(pos);
             p.attracted = false;
             p.armed = true;
             p.active = true;
@@ -71,6 +71,7 @@ namespace PastaSurvivors
             p.age = 0f;
             p.seed = Random.value * 10f;
             p.go.SetActive(true);
+            p.tr.position = p.pos;
             p.tr.localScale = Vector3.one * (kind == PickupKind.Chest ? 1.3f : kind == PickupKind.Special ? 1.5f : 1f);
             Active.Add(p);
             if (kind == PickupKind.Gem) gemCount++;
@@ -226,7 +227,8 @@ namespace PastaSurvivors
                     p.pos += d / dist * step;
                 }
                 float bob = p.kind == PickupKind.Chest ? 0.05f : p.kind == PickupKind.Special ? 1.3f + Mathf.Sin(p.age * 2f) * 0.2f : 0.35f + Mathf.Sin(p.age * 3f + p.seed) * 0.12f;
-                p.tr.position = new Vector3(p.pos.x, bob, p.pos.z);
+                p.pos = G.Arena.OnGround(p.pos);
+                p.tr.position = p.pos + Vector3.up * bob;
                 p.tr.rotation = Quaternion.Euler(p.kind == PickupKind.Coin ? 0f : 0f, (p.age * 120f + p.seed * 40f) % 360f, 0f);
             }
 

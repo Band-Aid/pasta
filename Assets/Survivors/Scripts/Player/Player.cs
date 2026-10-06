@@ -91,16 +91,15 @@ namespace PastaSurvivors
             if (MouseAiming)
             {
                 var d = MouseGround - Position; d.y = 0f;
-                return Position + Vector3.ClampMagnitude(d, maxDistance);
+                return G.Arena.OnGround(Position + Vector3.ClampMagnitude(d, maxDistance));
             }
-            if (!FirstPerson) return Position + AimDir * Mathf.Min(7f, maxDistance);
+            if (!FirstPerson) return G.Arena.OnGround(Position + AimDir * Mathf.Min(7f, maxDistance));
             var eye = Position + Vector3.up * PlayerAnim.EyeHeight;
             var f = LookForward;
-            float dist = f.y < -0.05f ? Mathf.Min(maxDistance, eye.y / -f.y) : maxDistance;
-            var p = eye + f * dist;
+            var p = G.Arena.RaycastGround(new Ray(eye, f), out var hit) ? hit : eye + f * maxDistance;
             var flat = p - Position; flat.y = 0f;
             if (flat.magnitude > maxDistance) flat = flat.normalized * maxDistance;
-            return Position + flat;
+            return G.Arena.OnGround(Position + flat);
         }
 
         public void SetFirstPerson(bool on)
@@ -284,7 +283,6 @@ namespace PastaSurvivors
 
             var next = transform.position + Velocity * dt;
             next = G.Arena.Resolve(next, Radius);
-            next.y = 0f;
             transform.position = next;
 
             invuln -= dt;
@@ -322,11 +320,7 @@ namespace PastaSurvivors
                 if ((mp - lastMousePos).sqrMagnitude > 4f || Controls.MouseAnyButton) mouseAimTimer = 3f;
                 lastMousePos = mp;
                 var ray = G.Cam.Cam.ScreenPointToRay(mp);
-                if (ray.direction.y < -0.01f)
-                {
-                    float t = -ray.origin.y / ray.direction.y;
-                    MouseGround = ray.origin + ray.direction * t;
-                }
+                if (G.Arena.RaycastGround(ray, out var ground)) MouseGround = ground;
             }
             var stick = Controls.AimStick();
             if (stick != Vector2.zero)

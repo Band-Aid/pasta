@@ -22,6 +22,7 @@ namespace PastaSurvivors
         public readonly int[] hitUids = new int[24];
         public Motion motion;
         public float angle, orbitRadius, orbitSpeed;
+        public float heightAboveGround;
         public float tickTimer, tickInterval, slow;
         public float explodeRadius, explodeDamage, explodeKnock = 3f;
         public bool sticky;
@@ -80,6 +81,7 @@ namespace PastaSurvivors
             var s = Get(kind.ToString(), kind, false);
             s.motion = motion;
             s.pos = s.origin = pos;
+            s.heightAboveGround = pos.y - G.Arena.GroundHeight(pos);
             s.vel = vel;
             s.speed = vel.magnitude;
             s.dir = s.speed > 0.001f ? vel / s.speed : Vector3.forward;
@@ -141,7 +143,7 @@ namespace PastaSurvivors
         {
             var s = Get("zone", ShotKind.Ketchup, true);
             s.motion = Motion.Zone;
-            s.pos = new Vector3(pos.x, 0.06f, pos.z);
+            s.pos = G.Arena.OnGround(pos) + Vector3.up * 0.06f;
             s.vel = Vector3.zero;
             s.radius = radius;
             s.damage = damage;
@@ -230,6 +232,7 @@ namespace PastaSurvivors
                             else
                             {
                                 var back = pp + Vector3.up * 0.8f - s.pos;
+                                back.y = 0f;
                                 float k = Mathf.Clamp01((t - outTime) / 0.6f);
                                 s.pos += back.normalized * s.speed * (0.2f + k * 1.1f) * dt;
                                 if (back.magnitude < 0.8f) end = true;
@@ -262,7 +265,7 @@ namespace PastaSurvivors
                         {
                             float t = 1f - Mathf.Clamp01(s.life / s.maxLife);
                             var flat = Vector3.Lerp(s.origin, s.target, t);
-                            flat.y = Mathf.Lerp(s.origin.y, 0.2f, t) + Mathf.Sin(t * Mathf.PI) * 3.5f;
+                            flat.y = Mathf.Lerp(s.origin.y, G.Arena.GroundHeight(s.target) + 0.2f, t) + Mathf.Sin(t * Mathf.PI) * 3.5f;
                             s.pos = flat;
                             break;
                         }
@@ -285,10 +288,15 @@ namespace PastaSurvivors
                             }
                             float fade = Mathf.Clamp01(s.life / 0.4f) * Mathf.Clamp01((s.maxLife - s.life) / 0.12f);
                             s.tr.localScale = new Vector3(s.radius, 1f, s.radius) * Mathf.Lerp(0.6f, 1f, fade);
+                            s.pos = G.Arena.OnGround(s.pos) + Vector3.up * 0.06f;
                             s.tr.position = s.pos;
                             break;
                         }
                 }
+
+                // Hit detection uses XZ distances; keep horizontal projectiles visible above the deck on slopes.
+                if (s.motion == Motion.Straight || s.motion == Motion.Seek || s.motion == Motion.Bounce || s.motion == Motion.Boomerang)
+                    s.pos.y = G.Arena.GroundHeight(s.pos) + s.heightAboveGround;
 
                 if (s.motion != Motion.Zone && s.motion != Motion.Lob && s.motion != Motion.Turret)
                 {
@@ -327,11 +335,12 @@ namespace PastaSurvivors
 
         public void Explode(Vector3 pos, float radius, float damage, int slot, float knock = 3f, bool big = false)
         {
-            G.Fx.Ring(new Vector3(pos.x, 0.1f, pos.z), radius, new Color(1f, 0.85f, 0.2f, 0.8f), 0.35f, 0.35f);
+            var ground = G.Arena.OnGround(pos);
+            G.Fx.Ring(ground + Vector3.up * 0.1f, radius, new Color(1f, 0.85f, 0.2f, 0.8f), 0.35f, 0.35f);
             G.Fx.Burst(pos, new Color(1f, 0.85f, 0.15f), big ? 40 : 10, big ? 12f : 7f, 0.22f, FxKind.Crumb);
             if (big)
             {
-                G.Fx.Slam(new Vector3(pos.x, 0f, pos.z), radius);
+                G.Fx.Slam(ground, radius);
                 G.Sfx.Play(SfxId.Snap, 1f, 0.7f);
                 G.Sfx.Play(SfxId.Slam, 0.9f, 0.9f);
                 G.Cam.Shake(0.5f);

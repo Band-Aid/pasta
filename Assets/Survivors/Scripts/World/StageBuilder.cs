@@ -322,16 +322,7 @@ namespace PastaSurvivors
         /// <summary>Walkable-blocking canal drawn on the pavement (throws fly over it).</summary>
         private static void Canal(Vector3 c, Vector2 size)
         {
-            var bed = new MeshKit().Quad(Vector3.zero, Vector2.one, new Color(0.06f, 0.18f, 0.2f)).ToMesh("Canal bed");
-            var b = Models.Static(bed, stageRoot, "Canal bed", Mats.Lit, false);
-            b.transform.position = c + Vector3.up * 0.02f;
-            b.transform.localScale = new Vector3(size.x, 1f, size.y);
-            var mat = Mats.WaterMaterial();
-            mat.SetTextureScale("_BaseMap", new Vector2(size.x / 6f, size.y / 6f));
-            var w = Models.Static(new MeshKit().Quad(Vector3.zero, Vector2.one, Color.white).ToMesh("Canal"), stageRoot, "Canal", mat, false);
-            w.transform.position = c + Vector3.up * 0.05f;
-            w.transform.localScale = new Vector3(size.x, 1f, size.y);
-            w.AddComponent<WaterScroll>();
+            CanalSurface(c, size);
             // Stone edges along the banks.
             bool alongX = size.x >= size.y;
             if (alongX)
@@ -347,17 +338,66 @@ namespace PastaSurvivors
             arena.AddWater(c, size);
         }
 
-        /// <summary>Stone footbridge over a canal (visual; the gap in the water is what makes it walkable).</summary>
+        /// <summary>Water visuals only; beneath a bridge the deck remains walkable in the navigation grid.</summary>
+        private static void CanalSurface(Vector3 c, Vector2 size)
+        {
+            var bed = new MeshKit().Quad(Vector3.zero, Vector2.one, new Color(0.06f, 0.18f, 0.2f)).ToMesh("Canal bed");
+            var b = Models.Static(bed, stageRoot, "Canal bed", Mats.Lit, false);
+            b.transform.position = c + Vector3.up * 0.02f;
+            b.transform.localScale = new Vector3(size.x, 1f, size.y);
+            var mat = Mats.WaterMaterial();
+            mat.SetTextureScale("_BaseMap", new Vector2(size.x / 6f, size.y / 6f));
+            var w = Models.Static(new MeshKit().Quad(Vector3.zero, Vector2.one, Color.white).ToMesh("Canal"), stageRoot, "Canal", mat, false);
+            w.transform.position = c + Vector3.up * 0.05f;
+            w.transform.localScale = new Vector3(size.x, 1f, size.y);
+            w.AddComponent<WaterScroll>();
+        }
+
+        /// <summary>Arched stone bridge with continuous bank approaches and a matching walking surface.</summary>
         private static void Bridge(Vector3 c, Vector2 size)
         {
             bool alongX = size.x >= size.y;
-            kit.Box(c + Vector3.up * 0.12f, new Vector3(size.x, 0.24f, size.y), new Color(0.86f, 0.82f, 0.74f));
-            var railSize = alongX ? new Vector3(size.x, 0.9f, 0.3f) : new Vector3(0.3f, 0.9f, size.y);
+            // A 3 m crown with a 0.4 m deck leaves 2.55 m above the water,
+            // over 1 m above the gondola's highest bow ornament. Extend each bank approach by 4 m.
+            var footprint = size + (alongX ? new Vector2(8f, 0f) : new Vector2(0f, 8f));
+            var surface = arena.AddBridge(c, footprint, 3f);
+            CanalSurface(c, alongX ? new Vector2(size.x - 1f, size.y) : new Vector2(size.x, size.y - 1f));
+            kit.Frame = Matrix4x4.TRS(c, Quaternion.Euler(0f, alongX ? 0f : 90f, 0f), Vector3.one);
+            BridgeStrip(surface, -surface.Width * 0.5f, surface.Width * 0.5f, -0.4f, 0f, new Color(0.86f, 0.82f, 0.74f));
+            BridgeStrip(surface, -surface.Width * 0.5f - 0.15f, -surface.Width * 0.5f + 0.15f, 0f, 0.9f, Stone);
+            BridgeStrip(surface, surface.Width * 0.5f - 0.15f, surface.Width * 0.5f + 0.15f, 0f, 0.9f, Stone);
+            kit.Frame = Matrix4x4.identity;
             var off = alongX ? new Vector3(0f, 0f, size.y * 0.5f) : new Vector3(size.x * 0.5f, 0f, 0f);
-            kit.Box(c + off + Vector3.up * 0.45f, railSize, Stone);
-            kit.Box(c - off + Vector3.up * 0.45f, railSize, Stone);
-            arena.AddWall(c + off, alongX ? new Vector2(size.x, 0.3f) : new Vector2(0.3f, size.y), false);
-            arena.AddWall(c - off, alongX ? new Vector2(size.x, 0.3f) : new Vector2(0.3f, size.y), false);
+            var railSize = alongX ? new Vector2(footprint.x, 0.3f) : new Vector2(0.3f, footprint.y);
+            arena.AddWall(c + off, railSize, false);
+            arena.AddWall(c - off, railSize, false);
+        }
+
+        private static void BridgeStrip(Arena.BridgeSurface surface, float near, float far, float bottom, float top, Color color)
+        {
+            for (int i = 0; i < Arena.BridgeSurface.Segments; i++)
+            {
+                float x0 = surface.Length * ((float)i / Arena.BridgeSurface.Segments - 0.5f);
+                float x1 = surface.Length * ((float)(i + 1) / Arena.BridgeSurface.Segments - 0.5f);
+                float y0 = surface.NodeHeight(i) - surface.center.y, y1 = surface.NodeHeight(i + 1) - surface.center.y;
+                var a = new Vector3(x0, y0 + top, near); var b = new Vector3(x0, y0 + top, far);
+                var c = new Vector3(x1, y1 + top, far); var d = new Vector3(x1, y1 + top, near);
+                var e = new Vector3(x0, y0 + bottom, near); var f = new Vector3(x0, y0 + bottom, far);
+                var g = new Vector3(x1, y1 + bottom, far); var h = new Vector3(x1, y1 + bottom, near);
+                BridgeFace(a, b, c, d, color);
+                BridgeFace(h, g, f, e, DarkStone);
+                BridgeFace(e, a, d, h, color);
+                BridgeFace(g, c, b, f, color);
+                if (i == 0) BridgeFace(f, b, a, e, color);
+                if (i == Arena.BridgeSurface.Segments - 1) BridgeFace(h, d, c, g, color);
+            }
+        }
+
+        private static void BridgeFace(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color color)
+        {
+            var normal = Vector3.Cross(b - a, c - a).normalized;
+            kit.Raw(new[] { a, b, c, d }, new[] { normal, normal, normal, normal },
+                new[] { Vector2.zero, Vector2.up, Vector2.one, Vector2.right }, new[] { 0, 1, 2, 0, 2, 3 }, color);
         }
 
         /// <summary>A traffic road: cars sweep it periodically and flatten anything on it, Italians included.</summary>
@@ -709,7 +749,8 @@ namespace PastaSurvivors
 
             // North-west island: the Rialto market.
             MarketArea(new Vector3(-24f, 0f, 24f), 10f, "リアルト市場");
-            StallRow(new Vector3(-24f, 0f, 19f), new Vector2(12f, 2f));
+            // Leave a 3.5 m landing beyond the arched bridge's north approach.
+            StallRow(new Vector3(-24f, 0f, 22f), new Vector2(12f, 2f));
             StallRow(new Vector3(-24f, 0f, 29f), new Vector2(12f, 2f));
             House(new Vector3(-12f, 0f, 30f), new Vector2(8f, 7f), 3.6f, new Color(0.9f, 0.7f, 0.68f));
             Pedestal(new Vector3(-40f, 0f, 26f));
@@ -830,6 +871,7 @@ namespace PastaSurvivors
         private static void Pigeon(Vector3 p)
         {
             if (!arena.Inside(p, 1f) || arena.Blocked(p, 0.5f) || p.magnitude < 6f) return;
+            p = arena.OnGround(p);
             var grey = new Color(0.55f, 0.56f, 0.6f);
             float yaw = R(0, 360);
             kit.Frame = Matrix4x4.TRS(p, Quaternion.Euler(0, yaw, 0), Vector3.one);
