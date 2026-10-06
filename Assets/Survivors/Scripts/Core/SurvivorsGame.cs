@@ -434,8 +434,23 @@ namespace PastaSurvivors
         private void ShowChest()
         {
             pendingChests--;
-            State = GameState.Chest;
-            Time.timeScale = 0f;
+            try
+            {
+                OpenChestRewards();
+                // Pause only after the reward screen has a working way to resume.
+                State = GameState.Chest;
+                Time.timeScale = 0f;
+            }
+            catch (System.Exception exception)
+            {
+                // Rewards already applied stay granted. Do not retry the chest and duplicate them.
+                Debug.LogException(exception, this);
+                Resume();
+            }
+        }
+
+        private void OpenChestRewards()
+        {
             var p = G.Player;
             var rewards = new List<Offer>();
             var evo = p.Evolvable();
