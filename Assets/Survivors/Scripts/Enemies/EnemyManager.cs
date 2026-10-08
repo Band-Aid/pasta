@@ -21,7 +21,10 @@ namespace PastaSurvivors
             set => gesturePercent = float.IsNaN(value) ? 100f : Mathf.Clamp(value, 0f, 100f);
         }
 
-        private readonly Dictionary<EnemyKind, Stack<Enemy>> pools = new Dictionary<EnemyKind, Stack<Enemy>>();
+        private readonly Dictionary<(EnemyKind kind, int variant), Stack<Enemy>> pools = new Dictionary<(EnemyKind, int), Stack<Enemy>>();
+        // Shuffled bags mix every appearance into a crowd without consuming combat randomness.
+        private readonly System.Random appearanceRandom = new System.Random(5831927);
+        private readonly Dictionary<EnemyKind, Queue<int>> appearanceBags = new Dictionary<EnemyKind, Queue<int>>();
         private readonly List<Enemy> scratch = new List<Enemy>(256);
         private Transform poolRoot;
         private int nextUid = 1;
@@ -59,8 +62,10 @@ namespace PastaSurvivors
         {
             var def = GameData.Enemy(kind);
             if (!def.IsBoss && !def.IsProp && HostileCount >= MaxAlive) return null;
-            if (!pools.TryGetValue(kind, out var pool)) pools[kind] = pool = new Stack<Enemy>();
-            Enemy e = pool.Count > 0 ? pool.Pop() : Create(def);
+            int variant = NextAppearance(kind);
+            var key = (kind, variant);
+            if (!pools.TryGetValue(key, out var pool)) pools[key] = pool = new Stack<Enemy>();
+            Enemy e = pool.Count > 0 ? pool.Pop() : Create(def, variant);
             e.uid = nextUid++;
             e.active = true;
             e.fleeing = false;
@@ -97,11 +102,30 @@ namespace PastaSurvivors
             return e;
         }
 
-        private Enemy Create(EnemyDef def)
+        private int NextAppearance(EnemyKind kind)
         {
-            var meshes = Models.Enemy(def.kind);
-            var e = new Enemy { def = def };
-            e.rig = Models.Build(meshes, poolRoot, def.kind.ToString());
+            int count = Models.EnemyVariantCount(kind);
+            if (count == 1) return 0;
+            if (!appearanceBags.TryGetValue(kind, out var bag)) appearanceBags[kind] = bag = new Queue<int>(count);
+            if (bag.Count == 0)
+            {
+                var order = new int[count];
+                for (int i = 0; i < count; i++) order[i] = i;
+                for (int i = count - 1; i > 0; i--)
+                {
+                    int j = appearanceRandom.Next(i + 1);
+                    (order[i], order[j]) = (order[j], order[i]);
+                }
+                foreach (int variant in order) bag.Enqueue(variant);
+            }
+            return bag.Dequeue();
+        }
+
+        private Enemy Create(EnemyDef def, int variant)
+        {
+            var meshes = Models.Enemy(def.kind, variant);
+            var e = new Enemy { def = def, appearanceVariant = variant };
+            e.rig = Models.Build(meshes, poolRoot, def.kind + " Variant " + variant);
             return e;
         }
 
@@ -109,7 +133,7 @@ namespace PastaSurvivors
         {
             e.active = false;
             e.rig.root.gameObject.SetActive(false);
-            pools[e.def.kind].Push(e);
+            pools[(e.def.kind, e.appearanceVariant)].Push(e);
         }
 
         public void Clear()

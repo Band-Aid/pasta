@@ -10,6 +10,7 @@ namespace PastaSurvivors
 
         public int uid;
         public EnemyDef def;
+        public int appearanceVariant;
         public Rig rig;
         public Vector3 pos, facing = Vector3.back, knock;
         public float hp, maxHp, damage, speedMul = 1f, radius, scale;
