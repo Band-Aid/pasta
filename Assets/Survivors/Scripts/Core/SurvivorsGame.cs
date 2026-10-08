@@ -280,7 +280,28 @@ namespace PastaSurvivors
             if (focus) UpdateCursor();
         }
 
+        private void OnApplicationPause(bool paused)
+        {
+            if (paused) SaveData.SaveAudio();
+        }
+
+        private void OnApplicationQuit() => SaveData.SaveAudio();
+
         // ---------------- pause / level up / chest ----------------
+
+        public void OpenAudioSettings()
+        {
+            if (State != GameState.Title && State != GameState.Paused) return;
+            // Preview the normal music level while the run stays paused.
+            Music.Duck(false);
+            Menus.ShowAudioSettings(() =>
+            {
+                if (State == GameState.Paused) Pause();
+                else Menus.ShowTitle();
+                Menus.Nav.index = 3;
+            });
+            UpdateCursor();
+        }
 
         public void OpenGestureSettings()
         {

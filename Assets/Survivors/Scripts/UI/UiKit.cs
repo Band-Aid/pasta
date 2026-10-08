@@ -140,6 +140,7 @@ namespace PastaSurvivors
             public RectTransform rt;
             public Image bg;
             public System.Action act;
+            public System.Action<int> adjust;
             public bool enabled = true;
             public Color normal;
         }
@@ -172,6 +173,7 @@ namespace PastaSurvivors
             if (nav.y != 0) index = Mathf.Clamp(index - nav.y * columns, 0, items.Count - 1);
             if (nav.y != 0 && columns == 1 && prev == index)
                 index = (index - nav.y + items.Count) % items.Count;
+            if (armed && nav.x != 0 && columns == 1) items[index].adjust?.Invoke(nav.x);
             var mouse = Controls.MousePosition;
             bool hovering = false;
             for (int i = 0; i < items.Count; i++)

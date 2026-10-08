@@ -13,7 +13,17 @@ namespace PastaSurvivors
         private readonly Dictionary<SfxId, float> lastPlayed = new Dictionary<SfxId, float>();
         private AudioSource[] voices;
         private int next;
-        public float Volume = 0.8f;
+        private float volume = SaveData.DefaultSfxVolume;
+        public float Volume
+        {
+            get => volume;
+            set
+            {
+                volume = Mathf.Clamp01(value);
+                if (voices == null) return;
+                foreach (var voice in voices) voice.volume = volume;
+            }
+        }
 
         public void Init()
         {
@@ -25,6 +35,7 @@ namespace PastaSurvivors
                 voices[i].spatialBlend = 0f;
                 voices[i].ignoreListenerPause = true;
             }
+            Volume = SaveData.SfxVolume;
             clips[SfxId.Snap] = PastaAudio.Snap;
             clips[SfxId.Pop] = Make("pop", 0.08f, (t, n) => Mathf.Sin(2 * Mathf.PI * (900f - 3000f * t) * t) * Env(t, 0.002f, 40f));
             clips[SfxId.Slam] = Make("slam", 0.45f, (t, n) => (Mathf.Sin(2 * Mathf.PI * (70f - 40f * t) * t) * 0.9f + n * 0.5f * Mathf.Exp(-t * 18f)) * Env(t, 0.003f, 7f));
@@ -62,7 +73,7 @@ namespace PastaSurvivors
             var v = voices[next];
             next = (next + 1) % voices.Length;
             v.pitch = pitch;
-            v.PlayOneShot(clip, volume * Volume);
+            v.PlayOneShot(clip, volume);
         }
 
         private static float Env(float t, float attack, float decay) => Mathf.Min(1f, t / attack) * Mathf.Exp(-t * decay);
@@ -122,7 +133,12 @@ namespace PastaSurvivors
         private bool ducked;
         private readonly Dictionary<int, AudioClip> cache = new Dictionary<int, AudioClip>();
         private readonly Dictionary<string, AudioClip> tracks = new Dictionary<string, AudioClip>();
-        public float Volume = 0.55f;
+        private float volume = SaveData.DefaultMusicVolume;
+        public float Volume
+        {
+            get => volume;
+            set { volume = Mathf.Clamp01(value); ApplyVolumes(); }
+        }
         /// <summary>Clip name of the current music: the track's file name, or "Tarantella N" for a synthesised theme.</summary>
         public string Current => sources[active] != null && sources[active].clip != null ? sources[active].clip.name : null;
 
@@ -162,6 +178,7 @@ namespace PastaSurvivors
                 source.volume = 0f;
                 sources[i] = source;
             }
+            Volume = SaveData.MusicVolume;
         }
 
         /// <summary>
@@ -240,7 +257,8 @@ namespace PastaSurvivors
 
         private void ApplyVolumes()
         {
-            for (int i = 0; i < sources.Length; i++) sources[i].volume = fades[i] * level * Volume * gains[i];
+            for (int i = 0; i < sources.Length; i++)
+                if (sources[i] != null) sources[i].volume = fades[i] * level * Volume * gains[i];
         }
 
         private static float Midi(int note) => 440f * Mathf.Pow(2f, (note - 69) / 12f);

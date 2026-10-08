@@ -259,6 +259,8 @@ namespace PastaSurvivors
         /// <summary>0 = top-down survivors view, 1 = first person.</summary>
         public static int ViewMode;
         public static float Sensitivity = 1f;
+        public const float DefaultMusicVolume = 0.55f, DefaultSfxVolume = 0.4f;
+        public static float MusicVolume = DefaultMusicVolume, SfxVolume = DefaultSfxVolume;
         public static bool FirstPerson => ViewMode == 1;
 
         public static void Load()
@@ -268,6 +270,8 @@ namespace PastaSurvivors
             TotalKills = PlayerPrefs.GetInt(Prefix + "kills", 0);
             ViewMode = PlayerPrefs.GetInt(Prefix + "view", 0);
             Sensitivity = Mathf.Clamp(PlayerPrefs.GetFloat(Prefix + "sens", 1f), 0.2f, 3f);
+            MusicVolume = Mathf.Clamp01(PlayerPrefs.GetFloat(Prefix + "musicVolume", DefaultMusicVolume));
+            SfxVolume = Mathf.Clamp01(PlayerPrefs.GetFloat(Prefix + "sfxVolume", DefaultSfxVolume));
             for (int i = 0; i < Shop.Length; i++) Shop[i] = PlayerPrefs.GetInt(Prefix + "shop" + i, 0);
             for (int i = 0; i < 3; i++)
             {
@@ -289,12 +293,19 @@ namespace PastaSurvivors
                 PlayerPrefs.SetFloat(Prefix + "best" + i, BestTime[i]);
                 PlayerPrefs.SetInt(Prefix + "clear" + i, Cleared[i] ? 1 : 0);
             }
+            SaveAudio();
+        }
+
+        public static void SaveAudio()
+        {
+            PlayerPrefs.SetFloat(Prefix + "musicVolume", MusicVolume);
+            PlayerPrefs.SetFloat(Prefix + "sfxVolume", SfxVolume);
             PlayerPrefs.Save();
         }
 
         public static void Wipe()
         {
-            foreach (var key in new[] { "coins", "unlocked", "kills", "view", "sens" }) PlayerPrefs.DeleteKey(Prefix + key);
+            foreach (var key in new[] { "coins", "unlocked", "kills", "view", "sens", "musicVolume", "sfxVolume" }) PlayerPrefs.DeleteKey(Prefix + key);
             for (int i = 0; i < Shop.Length; i++) PlayerPrefs.DeleteKey(Prefix + "shop" + i);
             for (int i = 0; i < 3; i++) { PlayerPrefs.DeleteKey(Prefix + "best" + i); PlayerPrefs.DeleteKey(Prefix + "clear" + i); }
             Load();
