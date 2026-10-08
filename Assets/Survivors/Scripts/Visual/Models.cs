@@ -40,6 +40,7 @@ namespace PastaSurvivors
         public int glasses;        // 0 none, 1 round, 2 sunglasses
         public bool angry = true, shorts, facePaint, backpack, belly, buttons, necklace, cigar;
         public float hunch;
+        public float eyeSpacing = 0.1f, noseSize = 1f;
         public Hat hat;
         public Color hatColor = Color.white;
         public Held heldR, heldL;
@@ -47,7 +48,7 @@ namespace PastaSurvivors
 
     public static class Models
     {
-        private static readonly Dictionary<EnemyKind, RigMeshes> enemyMeshes = new Dictionary<EnemyKind, RigMeshes>();
+        private static readonly Dictionary<(EnemyKind kind, int variant), RigMeshes> enemyMeshes = new Dictionary<(EnemyKind, int), RigMeshes>();
         private static readonly Dictionary<ShotKind, Mesh> shotMeshes = new Dictionary<ShotKind, Mesh>();
         private static readonly Dictionary<string, Mesh> misc = new Dictionary<string, Mesh>();
         private static readonly MeshKit kit = new MeshKit();
@@ -115,52 +116,74 @@ namespace PastaSurvivors
             return go;
         }
 
-        public static RigMeshes Enemy(EnemyKind kind)
+        /// <summary>Ordinary Italians (including elite Nonna and scooter riders) each have four cosmetic appearances.</summary>
+        public static int EnemyVariantCount(EnemyKind kind)
         {
-            if (enemyMeshes.TryGetValue(kind, out var cached)) return cached;
+            switch (kind)
+            {
+                case EnemyKind.Signore:
+                case EnemyKind.Tifoso:
+                case EnemyKind.Mamma:
+                case EnemyKind.Chef:
+                case EnemyKind.Vespista:
+                case EnemyKind.Gondoliere:
+                case EnemyKind.Pizzaiolo:
+                case EnemyKind.Mafioso:
+                case EnemyKind.Nonna:
+                    return 4;
+                default:
+                    return 1;
+            }
+        }
+
+        public static RigMeshes Enemy(EnemyKind kind, int variant = 0)
+        {
+            variant = Mathf.Clamp(variant, 0, EnemyVariantCount(kind) - 1);
+            var key = (kind, variant);
+            if (enemyMeshes.TryGetValue(key, out var cached)) return cached;
             RigMeshes m;
             switch (kind)
             {
                 case EnemyKind.Signore:
-                    m = Humanoid(new HumanSpec { shirt = new Color(0.95f, 0.93f, 0.88f), pants = new Color(0.28f, 0.28f, 0.32f), scarf = Tomato, moustache = 1, belly = true }, kind);
+                    m = Humanoid(new HumanSpec { shirt = new Color(0.95f, 0.93f, 0.88f), pants = new Color(0.28f, 0.28f, 0.32f), scarf = Tomato, moustache = 1, belly = true }, kind, variant);
                     break;
                 case EnemyKind.Tifoso:
                     m = Humanoid(new HumanSpec
                     {
                         shirt = Azzurro, pants = Color.white, shorts = true, scarf = new Color(0.95f, 0.95f, 1f), stripes = Azzurro,
                         hair = new Color(0.36f, 0.22f, 0.12f), facePaint = true, shoes = new Color(0.1f, 0.1f, 0.12f)
-                    }, kind);
+                    }, kind, variant);
                     break;
                 case EnemyKind.Mamma:
                     m = Humanoid(new HumanSpec
                     {
                         shirt = new Color(0.78f, 0.18f, 0.22f), skirt = new Color(0.72f, 0.16f, 0.2f), apron = new Color(0.97f, 0.96f, 0.92f),
                         hair = new Color(0.3f, 0.17f, 0.1f), hairStyle = 1, belly = true, heldR = Held.Slipper, necklace = true
-                    }, kind);
+                    }, kind, variant);
                     break;
                 case EnemyKind.Chef:
                     m = Humanoid(new HumanSpec
                     {
                         shirt = new Color(0.97f, 0.97f, 0.95f), pants = new Color(0.3f, 0.3f, 0.33f), scarf = Tomato, hat = Hat.Toque,
                         moustache = 2, belly = true, buttons = true, heldR = Held.Ladle
-                    }, kind);
+                    }, kind, variant);
                     break;
                 case EnemyKind.Vespista:
-                    m = Vespista();
+                    m = Vespista(variant);
                     break;
                 case EnemyKind.Gondoliere:
                     m = Humanoid(new HumanSpec
                     {
                         shirt = Color.white, stripes = new Color(0.1f, 0.12f, 0.3f), pants = new Color(0.08f, 0.08f, 0.1f), scarf = Tomato,
                         hat = Hat.Boater, hatColor = new Color(0.93f, 0.82f, 0.5f), hatBand = Tomato, moustache = 1, heldR = Held.Oar
-                    }, kind);
+                    }, kind, variant);
                     break;
                 case EnemyKind.Pizzaiolo:
                     m = Humanoid(new HumanSpec
                     {
                         shirt = new Color(0.98f, 0.98f, 0.98f), pants = new Color(0.2f, 0.22f, 0.3f), apron = new Color(0.99f, 0.99f, 0.97f),
                         scarf = Tomato, hat = Hat.PaperHat, moustache = 1, heldR = Held.Pizza, skin = Tan
-                    }, kind);
+                    }, kind, variant);
                     break;
                 case EnemyKind.Mafioso:
                     m = Humanoid(new HumanSpec
@@ -168,14 +191,14 @@ namespace PastaSurvivors
                         shirt = new Color(0.95f, 0.95f, 0.95f), jacket = new Color(0.1f, 0.1f, 0.12f), pants = new Color(0.1f, 0.1f, 0.12f),
                         tie = new Color(0.75f, 0.08f, 0.1f), hat = Hat.Fedora, hatColor = new Color(0.12f, 0.12f, 0.14f), hatBand = new Color(0.5f, 0.1f, 0.1f),
                         glasses = 2, moustache = 1, skin = Tan
-                    }, kind);
+                    }, kind, variant);
                     break;
                 case EnemyKind.Nonna:
                     m = Humanoid(new HumanSpec
                     {
                         shirt = new Color(0.12f, 0.1f, 0.12f), skirt = new Color(0.1f, 0.09f, 0.11f), scarf = new Color(0.3f, 0.28f, 0.32f),
                         hair = new Color(0.82f, 0.82f, 0.84f), hairStyle = 1, glasses = 1, hunch = 14f, heldR = Held.Spoon, angry = true
-                    }, kind);
+                    }, kind, variant);
                     break;
                 case EnemyKind.BossNonna:
                     m = Humanoid(new HumanSpec
@@ -207,8 +230,104 @@ namespace PastaSurvivors
                     m = Barrel();
                     break;
             }
-            enemyMeshes[kind] = m;
+            enemyMeshes[key] = m;
             return m;
+        }
+
+        private static Color VariantColor(int variant, Color first, Color second, Color third)
+            => variant == 1 ? first : variant == 2 ? second : third;
+
+        /// <summary>Curated outfits keep each role recognisable. Variant zero is the original model.</summary>
+        private static void VaryAppearance(HumanSpec s, EnemyKind kind, int variant)
+        {
+            if (variant == 0) return;
+            s.skin = VariantColor(variant, Tan, new Color(0.76f, 0.53f, 0.36f), Skin);
+            s.hair = VariantColor(variant, new Color(0.36f, 0.22f, 0.12f), new Color(0.11f, 0.09f, 0.08f), new Color(0.55f, 0.53f, 0.5f));
+            s.eyeSpacing = variant == 1 ? 0.105f : variant == 2 ? 0.09f : 0.115f;
+            s.noseSize = variant == 1 ? 0.85f : variant == 2 ? 1.25f : 1.1f;
+            switch (kind)
+            {
+                case EnemyKind.Signore:
+                    s.shirt = VariantColor(variant, new Color(0.4f, 0.58f, 0.38f), new Color(0.88f, 0.63f, 0.22f), new Color(0.58f, 0.18f, 0.24f));
+                    s.pants = VariantColor(variant, new Color(0.18f, 0.25f, 0.38f), new Color(0.34f, 0.24f, 0.18f), new Color(0.2f, 0.2f, 0.24f));
+                    s.scarf = VariantColor(variant, Azzurro, Basil, new Color(0.93f, 0.82f, 0.55f));
+                    s.moustache = variant == 1 ? 0 : variant == 2 ? 2 : 1;
+                    s.belly = variant == 2;
+                    s.glasses = variant == 1 ? 1 : 0;
+                    s.hairStyle = variant == 2 ? 3 : 0;
+                    if (variant == 3) { s.hat = Hat.Cap; s.hatColor = new Color(0.85f, 0.78f, 0.62f); }
+                    break;
+                case EnemyKind.Tifoso:
+                    s.shirt = VariantColor(variant, new Color(0.08f, 0.22f, 0.58f), new Color(0.25f, 0.55f, 0.92f), new Color(0.1f, 0.32f, 0.72f));
+                    s.stripes = VariantColor(variant, new Color(0.18f, 0.45f, 0.85f), new Color(0.08f, 0.26f, 0.6f), Color.white);
+                    s.scarf = VariantColor(variant, Basil, Color.white, Tomato);
+                    s.pants = variant == 2 ? new Color(0.12f, 0.2f, 0.4f) : Color.white;
+                    s.facePaint = variant != 2;
+                    s.moustache = variant == 1 ? 0 : variant == 2 ? 1 : 2;
+                    s.hairStyle = variant == 2 ? 3 : 0;
+                    s.belly = variant == 2;
+                    s.hat = variant == 1 ? Hat.Cap : variant == 3 ? Hat.Headband : Hat.None;
+                    s.hatColor = Azzurro;
+                    break;
+                case EnemyKind.Mamma:
+                    s.shirt = VariantColor(variant, new Color(0.2f, 0.52f, 0.34f), new Color(0.2f, 0.36f, 0.7f), new Color(0.63f, 0.26f, 0.5f));
+                    s.skirt = s.shirt;
+                    s.apron = VariantColor(variant, new Color(0.98f, 0.9f, 0.65f), new Color(0.96f, 0.86f, 0.8f), new Color(0.92f, 0.95f, 0.9f));
+                    s.hairStyle = variant == 1 ? 4 : variant == 2 ? 2 : 1;
+                    s.belly = variant == 2;
+                    s.glasses = variant == 3 ? 1 : 0;
+                    s.necklace = variant != 2;
+                    break;
+                case EnemyKind.Chef:
+                    s.scarf = VariantColor(variant, Basil, Azzurro, new Color(0.95f, 0.72f, 0.2f));
+                    s.pants = VariantColor(variant, new Color(0.1f, 0.16f, 0.27f), new Color(0.24f, 0.18f, 0.16f), new Color(0.16f, 0.17f, 0.19f));
+                    if (variant != 3) s.apron = variant == 1 ? new Color(0.16f, 0.18f, 0.22f) : new Color(0.88f, 0.82f, 0.68f);
+                    s.moustache = variant == 1 ? 0 : variant == 2 ? 1 : 2;
+                    s.belly = variant == 2;
+                    s.glasses = variant == 3 ? 1 : 0;
+                    break;
+                case EnemyKind.Gondoliere:
+                    s.stripes = VariantColor(variant, Tomato, new Color(0.08f, 0.24f, 0.22f), new Color(0.06f, 0.07f, 0.1f));
+                    s.scarf = VariantColor(variant, Azzurro, Tomato, new Color(0.9f, 0.65f, 0.2f));
+                    s.hatBand = s.scarf;
+                    s.hatColor = VariantColor(variant, new Color(0.98f, 0.93f, 0.74f), new Color(0.76f, 0.6f, 0.32f), new Color(0.94f, 0.9f, 0.82f));
+                    s.moustache = variant == 1 ? 0 : variant == 2 ? 2 : 1;
+                    s.glasses = variant == 2 ? 2 : 0;
+                    break;
+                case EnemyKind.Pizzaiolo:
+                    s.apron = VariantColor(variant, Basil, Tomato, new Color(0.95f, 0.82f, 0.5f));
+                    s.scarf = VariantColor(variant, Tomato, new Color(0.95f, 0.93f, 0.85f), Basil);
+                    s.moustache = variant == 1 ? 0 : variant == 2 ? 2 : 1;
+                    s.belly = variant == 2;
+                    s.glasses = variant == 3 ? 1 : 0;
+                    break;
+                case EnemyKind.Mafioso:
+                    var suit = VariantColor(variant, new Color(0.12f, 0.18f, 0.32f), new Color(0.24f, 0.24f, 0.28f), new Color(0.32f, 0.22f, 0.18f));
+                    s.jacket = suit; s.pants = suit; s.hatColor = suit;
+                    s.tie = VariantColor(variant, new Color(0.92f, 0.7f, 0.24f), Azzurro, Basil);
+                    s.hatBand = s.tie;
+                    s.moustache = variant == 1 ? 0 : variant == 2 ? 2 : 1;
+                    s.glasses = variant == 1 ? 1 : variant == 2 ? 0 : 2;
+                    s.belly = variant == 2;
+                    break;
+                case EnemyKind.Nonna:
+                    s.shirt = VariantColor(variant, new Color(0.28f, 0.12f, 0.3f), new Color(0.1f, 0.24f, 0.17f), new Color(0.1f, 0.15f, 0.3f));
+                    s.skirt = s.shirt;
+                    s.scarf = VariantColor(variant, new Color(0.65f, 0.5f, 0.68f), new Color(0.62f, 0.72f, 0.5f), new Color(0.68f, 0.7f, 0.8f));
+                    s.hair = VariantColor(variant, new Color(0.94f, 0.92f, 0.87f), new Color(0.48f, 0.48f, 0.5f), new Color(0.72f, 0.7f, 0.68f));
+                    s.hairStyle = variant == 1 ? 1 : variant == 2 ? 2 : 0;
+                    s.necklace = variant != 2;
+                    s.belly = variant == 2;
+                    if (variant == 2) s.apron = new Color(0.87f, 0.84f, 0.74f);
+                    break;
+                case EnemyKind.Vespista:
+                    s.shirt = VariantColor(variant, new Color(0.14f, 0.3f, 0.54f), new Color(0.9f, 0.62f, 0.16f), new Color(0.17f, 0.4f, 0.28f));
+                    s.pants = VariantColor(variant, new Color(0.3f, 0.3f, 0.34f), new Color(0.1f, 0.16f, 0.3f), new Color(0.34f, 0.24f, 0.16f));
+                    s.hatColor = VariantColor(variant, new Color(0.93f, 0.9f, 0.8f), Azzurro, new Color(0.95f, 0.74f, 0.2f));
+                    s.glasses = variant == 1 ? 0 : variant == 2 ? 1 : 2;
+                    s.moustache = variant == 3 ? 1 : 0;
+                    break;
+            }
         }
 
         public static RigMeshes Player(CharacterDef c, int index)
@@ -228,8 +347,9 @@ namespace PastaSurvivors
             return m;
         }
 
-        private static RigMeshes Humanoid(HumanSpec s, EnemyKind? kind)
+        private static RigMeshes Humanoid(HumanSpec s, EnemyKind? kind, int variant = 0)
         {
+            if (kind.HasValue) VaryAppearance(s, kind.Value, variant);
             var m = new RigMeshes { freeHandL = s.heldL == Held.None, freeHandR = s.heldR == Held.None };
             // ---- legs (origin at hip)
             kit.Clear();
@@ -374,12 +494,12 @@ namespace PastaSurvivors
             float ey = y + 0.04f;
             for (int side = -1; side <= 1; side += 2)
             {
-                kit.Ball(new Vector3(side * 0.1f, ey, 0.2f), new Vector3(0.14f, 0.15f, 0.1f), Color.white);
-                kit.Ball(new Vector3(side * 0.095f, ey - 0.01f, 0.25f), 0.07f, new Color(0.08f, 0.06f, 0.06f));
+                kit.Ball(new Vector3(side * s.eyeSpacing, ey, 0.2f), new Vector3(0.14f, 0.15f, 0.1f), Color.white);
+                kit.Ball(new Vector3(side * s.eyeSpacing * 0.95f, ey - 0.01f, 0.25f), 0.07f, new Color(0.08f, 0.06f, 0.06f));
                 float browTilt = s.angry ? side * -20f : side * 8f;
-                kit.Box(new Vector3(side * 0.1f, ey + 0.11f, 0.22f), new Vector3(0.14f, 0.035f, 0.04f), hair.grayscale > 0.7f ? new Color(0.6f, 0.6f, 0.62f) : hair, new Vector3(0, 0, browTilt));
+                kit.Box(new Vector3(side * s.eyeSpacing, ey + 0.11f, 0.22f), new Vector3(0.14f, 0.035f, 0.04f), hair.grayscale > 0.7f ? new Color(0.6f, 0.6f, 0.62f) : hair, new Vector3(0, 0, browTilt));
             }
-            kit.Ball(new Vector3(0, y - 0.04f, 0.25f), new Vector3(0.1f, 0.12f, 0.12f), s.skin * 0.95f + new Color(0.05f, 0, 0));
+            kit.Ball(new Vector3(0, y - 0.04f, 0.25f), new Vector3(0.1f, 0.12f, 0.12f) * s.noseSize, s.skin * 0.95f + new Color(0.05f, 0, 0));
             // Mouth: open shouting oval.
             kit.Ball(new Vector3(0, y - 0.15f, 0.21f), new Vector3(0.12f, s.angry ? 0.07f : 0.03f, 0.04f), new Color(0.45f, 0.08f, 0.1f));
             if (s.moustache > 0)
@@ -408,8 +528,8 @@ namespace PastaSurvivors
             if (s.glasses == 1)
             {
                 var g = new Color(0.25f, 0.2f, 0.18f);
-                kit.Cyl(new Vector3(-0.1f, ey, 0.27f), new Vector3(0.15f, 0.015f, 0.15f), g, new Vector3(90, 0, 0), 10);
-                kit.Cyl(new Vector3(0.1f, ey, 0.27f), new Vector3(0.15f, 0.015f, 0.15f), g, new Vector3(90, 0, 0), 10);
+                kit.Cyl(new Vector3(-s.eyeSpacing, ey, 0.27f), new Vector3(0.15f, 0.015f, 0.15f), g, new Vector3(90, 0, 0), 10);
+                kit.Cyl(new Vector3(s.eyeSpacing, ey, 0.27f), new Vector3(0.15f, 0.015f, 0.15f), g, new Vector3(90, 0, 0), 10);
             }
             else if (s.glasses == 2)
             {
@@ -473,21 +593,23 @@ namespace PastaSurvivors
             }
         }
 
-        private static RigMeshes Vespista()
+        private static RigMeshes Vespista(int variant)
         {
             var s = new HumanSpec
             {
                 shirt = new Color(0.45f, 0.28f, 0.16f), pants = new Color(0.2f, 0.25f, 0.4f), glasses = 2, hair = new Color(0.15f, 0.1f, 0.08f),
-                hat = Hat.Helmet, skin = Tan
+                hat = Hat.Helmet, hatColor = new Color(0.92f, 0.22f, 0.2f), skin = Tan
             };
+            VaryAppearance(s, EnemyKind.Vespista, variant);
             var m = new RigMeshes { seated = true, armRest = -58f, leg = null };
             kit.Clear();
-            var mint = new Color(0.55f, 0.85f, 0.75f);
+            var paint = variant == 0 ? new Color(0.55f, 0.85f, 0.75f)
+                : VariantColor(variant, Tomato, Azzurro, new Color(0.95f, 0.89f, 0.72f));
             // Scooter
-            kit.Box(new Vector3(0, 0.45f, -0.25f), new Vector3(0.5f, 0.45f, 0.8f), mint);
-            kit.Ball(new Vector3(0, 0.5f, -0.45f), new Vector3(0.6f, 0.5f, 0.7f), mint);
-            kit.Box(new Vector3(0, 0.3f, 0.3f), new Vector3(0.36f, 0.12f, 0.6f), mint);
-            kit.Box(new Vector3(0, 0.75f, 0.6f), new Vector3(0.42f, 0.8f, 0.1f), mint, new Vector3(-12, 0, 0));
+            kit.Box(new Vector3(0, 0.45f, -0.25f), new Vector3(0.5f, 0.45f, 0.8f), paint);
+            kit.Ball(new Vector3(0, 0.5f, -0.45f), new Vector3(0.6f, 0.5f, 0.7f), paint);
+            kit.Box(new Vector3(0, 0.3f, 0.3f), new Vector3(0.36f, 0.12f, 0.6f), paint);
+            kit.Box(new Vector3(0, 0.75f, 0.6f), new Vector3(0.42f, 0.8f, 0.1f), paint, new Vector3(-12, 0, 0));
             kit.Bar(new Vector3(-0.35f, 1.15f, 0.62f), new Vector3(0.35f, 1.15f, 0.62f), 0.05f, new Color(0.3f, 0.3f, 0.32f));
             kit.Ball(new Vector3(0, 1.1f, 0.68f), new Vector3(0.18f, 0.18f, 0.08f), new Color(1f, 0.95f, 0.7f));
             kit.Box(new Vector3(0, 0.72f, -0.3f), new Vector3(0.38f, 0.08f, 0.6f), new Color(0.35f, 0.2f, 0.12f));
@@ -505,7 +627,7 @@ namespace PastaSurvivors
             kit.Box(new Vector3(0.17f, 0.25f, 0.56f), new Vector3(0.14f, 0.09f, 0.26f), s.shoes);
             kit.Cyl(new Vector3(0, 1.38f, 0), new Vector3(0.36f, 0.1f, 0.32f), new Color(0.95f, 0.95f, 0.9f));
             Head(s, 1.66f);
-            kit.Ball(new Vector3(0, 1.78f, -0.02f), new Vector3(0.58f, 0.42f, 0.58f), new Color(0.92f, 0.22f, 0.2f));
+            kit.Ball(new Vector3(0, 1.78f, -0.02f), new Vector3(0.58f, 0.42f, 0.58f), s.hatColor);
             kit.Box(new Vector3(0, 1.84f, 0), new Vector3(0.08f, 0.2f, 0.56f), Color.white);
             m.body = kit.ToMesh("Vespista");
             m.armL = Arm(s, Held.None, true);
