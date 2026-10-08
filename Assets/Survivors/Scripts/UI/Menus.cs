@@ -26,6 +26,10 @@ namespace PastaSurvivors
         private bool draggingGesture;
         private System.Action closeGestureSettings;
         public bool GestureSettingsOpen => Current == "gestures";
+        public bool AudioSettingsOpen => Current == "audio";
+        private readonly Slider[] audioSliders = new Slider[2];
+        private readonly RectTransform[] audioTracks = new RectTransform[2];
+        private int draggingAudio = -1;
 
         public void Build(Transform parent)
         {
@@ -37,7 +41,10 @@ namespace PastaSurvivors
 
         public void Close()
         {
+            if (AudioSettingsOpen) SaveData.SaveAudio();
             Current = "";
+            for (int i = 0; i < audioSliders.Length; i++) { audioSliders[i] = null; audioTracks[i] = null; }
+            draggingAudio = -1;
             gestureSlider = null;
             draggingGesture = false;
             closeGestureSettings = null;
@@ -71,6 +78,7 @@ namespace PastaSurvivors
         {
             if (!Open) return;
             if (GestureSettingsOpen) { UpdateGestureSettings(); return; }
+            if (AudioSettingsOpen) { UpdateAudioSettings(); return; }
             Nav.Update();
             float age = Time.unscaledTime - openedAt;
             if (age > 0.45f) return;
@@ -106,17 +114,18 @@ namespace PastaSurvivors
             UiKit.Img(flag, "R", new Vector2(0f, 0.5f), new Vector2(160, 0), new Vector2(80, 10), new Color(0.85f, 0.15f, 0.15f), UiKit.White, new Vector2(0f, 0.5f));
 
             float y = -400;
-            pop.Add(Button(c, "ゲームスタート", new Vector2(0f, 1f), new Vector2(100, y), new Vector2(560, 76), () => ShowCharacters(), 36, true, new Color(0.55f, 0.16f, 0.12f, 0.95f)));
-            pop.Add(Button(c, $"パワーアップ   € {SaveData.Coins}", new Vector2(0f, 1f), new Vector2(100, y - 86), new Vector2(560, 76), () => ShowShop()));
-            pop.Add(Button(c, "視点：" + (SaveData.FirstPerson ? "一人称（FPS）" : "見下ろし"), new Vector2(0f, 1f), new Vector2(100, y - 172), new Vector2(560, 76), () =>
+            pop.Add(Button(c, "ゲームスタート", new Vector2(0f, 1f), new Vector2(100, y), new Vector2(560, 68), () => ShowCharacters(), 36, true, new Color(0.55f, 0.16f, 0.12f, 0.95f)));
+            pop.Add(Button(c, $"パワーアップ   € {SaveData.Coins}", new Vector2(0f, 1f), new Vector2(100, y - 76), new Vector2(560, 68), () => ShowShop()));
+            pop.Add(Button(c, "視点：" + (SaveData.FirstPerson ? "一人称（FPS）" : "見下ろし"), new Vector2(0f, 1f), new Vector2(100, y - 152), new Vector2(560, 68), () =>
             {
                 SaveData.ViewMode = SaveData.FirstPerson ? 0 : 1;
                 SaveData.Save();
                 ShowTitle();
                 Nav.index = 2;
             }));
-            pop.Add(Button(c, "遊び方", new Vector2(0f, 1f), new Vector2(100, y - 258), new Vector2(560, 76), () => ShowHowTo()));
-            pop.Add(Button(c, "終了", new Vector2(0f, 1f), new Vector2(100, y - 344), new Vector2(560, 76), () => G.Game.Quit()));
+            pop.Add(Button(c, "音量設定", new Vector2(0f, 1f), new Vector2(100, y - 228), new Vector2(560, 68), () => G.Game.OpenAudioSettings()));
+            pop.Add(Button(c, "遊び方", new Vector2(0f, 1f), new Vector2(100, y - 304), new Vector2(560, 68), () => ShowHowTo()));
+            pop.Add(Button(c, "終了", new Vector2(0f, 1f), new Vector2(100, y - 380), new Vector2(560, 68), () => G.Game.Quit()));
 
             var rec = new System.Text.StringBuilder();
             for (int i = 0; i < 3; i++)
@@ -313,12 +322,91 @@ namespace PastaSurvivors
                 $"最大HP  {p.MaxHp:0}\nパワー  {p.Might * 100:0}%\n範囲  {p.AreaMul * 100:0}%\nクールダウン  {p.CooldownMul * 100:0}%\n" +
                 $"発射数  +{p.AmountBonus}\n移動速度  {p.MoveSpeed:0.0}\n回収範囲  {p.MagnetRadius:0.0}m\n成長  {p.GrowthMul * 100:0}%\n装甲  {p.Armor:0}\n復活  {p.Revivals}";
             UiKit.Label(c, "Stats", stats, 28, Color.white, TextAnchor.UpperLeft, new Vector2(0.5f, 0.5f), new Vector2(360, 40), new Vector2(400, 600), FontStyle.Normal);
-            Button(c, "再開", new Vector2(0.5f, 0f), new Vector2(-480, 110), new Vector2(300, 76), resume);
-            Button(c, "視点：" + (SaveData.FirstPerson ? "一人称" : "見下ろし"), new Vector2(0.5f, 0f), new Vector2(-160, 110), new Vector2(300, 76), toggleView);
-            Button(c, "身振り設定（再開）", new Vector2(0.5f, 0f), new Vector2(160, 110), new Vector2(300, 76), () => G.Game.OpenGestureSettings(), 28);
-            Button(c, "タイトルへ戻る", new Vector2(0.5f, 0f), new Vector2(480, 110), new Vector2(300, 76), quit);
-            Nav.columns = 4;
+            Button(c, "再開", new Vector2(0.5f, 0f), new Vector2(-640, 110), new Vector2(300, 76), resume);
+            Button(c, "視点：" + (SaveData.FirstPerson ? "一人称" : "見下ろし"), new Vector2(0.5f, 0f), new Vector2(-320, 110), new Vector2(300, 76), toggleView);
+            Button(c, "身振り設定（再開）", new Vector2(0.5f, 0f), new Vector2(0, 110), new Vector2(300, 76), () => G.Game.OpenGestureSettings(), 28);
+            Button(c, "音量設定", new Vector2(0.5f, 0f), new Vector2(320, 110), new Vector2(300, 76), () => G.Game.OpenAudioSettings());
+            Button(c, "タイトルへ戻る", new Vector2(0.5f, 0f), new Vector2(640, 110), new Vector2(300, 76), quit);
+            Nav.columns = 5;
             Nav.onCancel = resume;
+        }
+
+        public void ShowAudioSettings(System.Action close)
+        {
+            var c = Begin("audio", 0.7f);
+            var panel = UiKit.Img(c, "AudioSettings", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(760, 610), UiKit.Ink);
+            UiKit.Label(panel.transform, "Title", "音量設定", 60, UiKit.Gold, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 1f), new Vector2(0, -20), new Vector2(700, 76));
+            AddAudioSlider(panel.transform, 0, "BGM", -118, SaveData.MusicVolume, value =>
+            {
+                SaveData.MusicVolume = value;
+                G.Game.Music.Volume = value;
+            });
+            AddAudioSlider(panel.transform, 1, "SE（効果音）", -250, SaveData.SfxVolume, value =>
+            {
+                SaveData.SfxVolume = value;
+                G.Sfx.Volume = value;
+                G.Sfx.Play(SfxId.Select, 0.5f);
+            });
+            UiKit.Label(panel.transform, "Hint", "↑↓：項目を選択   ←→：1%ずつ調整\nドラッグで調整・0%でミュート", 22, UiKit.Cream, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 1f), new Vector2(0, -377), new Vector2(700, 50), FontStyle.Normal);
+            Button(panel.transform, "初期値に戻す", new Vector2(0.5f, 1f), new Vector2(0, -440), new Vector2(360, 60), () =>
+            {
+                audioSliders[0].value = SaveData.DefaultMusicVolume * 100f;
+                audioSliders[1].value = SaveData.DefaultSfxVolume * 100f;
+            }, 28);
+            Button(panel.transform, "戻る（Esc / B）", new Vector2(0.5f, 1f), new Vector2(0, -520), new Vector2(360, 60), close, 28);
+            Nav.onCancel = close;
+        }
+
+        private void AddAudioSlider(Transform parent, int index, string name, float y, float value, System.Action<float> changed)
+        {
+            var row = UiKit.Img(parent, name, new Vector2(0.5f, 1f), new Vector2(0, y), new Vector2(680, 116), new Color(0.16f, 0.12f, 0.12f, 0.92f));
+            var label = UiKit.Label(row.transform, "Volume", "", 32, UiKit.Cream, TextAnchor.MiddleLeft,
+                new Vector2(0.5f, 1f), new Vector2(0, -4), new Vector2(608, 44));
+            var track = UiKit.Rect(row.transform, "Slider", new Vector2(0.5f, 1f), new Vector2(0, -58), new Vector2(608, 44));
+            UiKit.Img(track, "Track", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(608, 10), new Color(0.35f, 0.3f, 0.25f));
+            var fill = UiKit.Fill(UiKit.Img(track, "Fill", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(608, 10), UiKit.Gold));
+            var handle = UiKit.Img(track, "Handle", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(24, 36), UiKit.Cream, null, new Vector2(0.5f, 0.5f));
+            var slider = track.gameObject.AddComponent<Slider>();
+            slider.navigation = new Navigation { mode = Navigation.Mode.None };
+            slider.transition = Selectable.Transition.None;
+            slider.minValue = 0f;
+            slider.maxValue = 100f;
+            slider.wholeNumbers = true;
+            slider.fillRect = fill.rectTransform;
+            slider.handleRect = handle.rectTransform;
+            slider.targetGraphic = handle;
+            slider.SetValueWithoutNotify(value * 100f);
+            label.text = $"{name}   {slider.value:0}%";
+            slider.onValueChanged.AddListener(percent =>
+            {
+                label.text = $"{name}   {percent:0}%";
+                changed(percent / 100f);
+            });
+            audioSliders[index] = slider;
+            audioTracks[index] = track;
+            Nav.Add(row.rectTransform, row, null).adjust = direction => slider.value += direction;
+        }
+
+        private void UpdateAudioSettings()
+        {
+            if (Time.unscaledTime - openedAt < 0.25f) return;
+            Nav.Update();
+            if (!AudioSettingsOpen) return;
+            // Menus poll input without an EventSystem, so capture slider drags here too.
+            var mouse = Controls.MousePosition;
+            if (Controls.MouseClicked)
+            {
+                for (int i = 0; i < audioTracks.Length; i++)
+                    if (RectTransformUtility.RectangleContainsScreenPoint(audioTracks[i], mouse, null)) draggingAudio = i;
+            }
+            if (!Controls.MouseMoveHeld) draggingAudio = -1;
+            if (draggingAudio < 0) return;
+            Nav.index = draggingAudio;
+            var track = audioTracks[draggingAudio];
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(track, mouse, null, out var local))
+                audioSliders[draggingAudio].value = Mathf.InverseLerp(track.rect.xMin, track.rect.xMax, local.x) * 100f;
         }
 
         public void ShowGestureSettings(System.Action close)
