@@ -80,7 +80,7 @@ namespace PastaSurvivors
         public (EnemyKind kind, float weight)[] mix;
     }
 
-    public enum StageEventType { Ring, Stampede, Swarm, Elite, Boss }
+    public enum StageEventType { Ring, Stampede, Swarm, Elite, Boss, Music }
 
     public struct StageEvent
     {
@@ -89,6 +89,8 @@ namespace PastaSurvivors
         public EnemyKind kind;
         public int count;
         public string banner;
+        /// <summary>Music events: the track in Resources/Music to crossfade to.</summary>
+        public string music;
     }
 
     public class StageDef
@@ -103,6 +105,11 @@ namespace PastaSurvivors
         /// </summary>
         public float hpPerMinute = 0.075f, hpPerLevel = 0.03f, damagePerMinute = 0.04f, damagePerLevel = 0.01f;
         public EnemyKind boss;
+        /// <summary>
+        /// Track in Resources/Music (file name without extension) that opens the stage; change it mid-stage with a
+        /// Music event. Without one the stage plays its synthesised theme, and the boss the synthesised boss theme.
+        /// </summary>
+        public string music, bossMusic;
         public WavePhase[] phases;
         public StageEvent[] events;
     }
@@ -289,7 +296,7 @@ namespace PastaSurvivors
                 new StageDef
                 {
                     index = 0, theme = StageTheme.Roma, name = "ローマ", sub = "トラステヴェレの広場", boss = EnemyKind.BossNonna,
-                    bossName = "グランデ・ノンナ", hpMul = 1f, damageMul = 1f,
+                    bossName = "グランデ・ノンナ", hpMul = 1f, damageMul = 1f, music = "Pasta la vista",
                     hpPerLevel = 0.02f, damagePerLevel = 0.006f, // the first stage stays forgiving for new players
                     phases = new[]
                     {
@@ -321,7 +328,7 @@ namespace PastaSurvivors
                 new StageDef
                 {
                     index = 1, theme = StageTheme.Venezia, name = "ヴェネツィア", sub = "サン・マルコの運河広場", boss = EnemyKind.BossCapitano,
-                    bossName = "イル・カピターノ", hpMul = 1.7f, damageMul = 1.15f,
+                    bossName = "イル・カピターノ", hpMul = 1.7f, damageMul = 1.15f, music = "Pasta la vista",
                     phases = new[]
                     {
                         new WavePhase { start = 0, minAlive = 12, interval = 1.3f, batch = 2, mix = M((EnemyKind.Signore, 8), (EnemyKind.Tifoso, 3)) },
@@ -350,7 +357,7 @@ namespace PastaSurvivors
                 new StageDef
                 {
                     index = 2, theme = StageTheme.Napoli, name = "ナポリ", sub = "ヴェスヴィオを望むピッツェリア通り", boss = EnemyKind.BossDon,
-                    bossName = "ドン・カルボナーラ", hpMul = 2.4f, damageMul = 1.3f,
+                    bossName = "ドン・カルボナーラ", hpMul = 2.4f, damageMul = 1.3f, music = "Pasta la vista",
                     phases = new[]
                     {
                         new WavePhase { start = 0, minAlive = 14, interval = 1.2f, batch = 2, mix = M((EnemyKind.Signore, 6), (EnemyKind.Tifoso, 5)) },

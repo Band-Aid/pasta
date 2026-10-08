@@ -113,6 +113,15 @@
    - 回復するピッツェリア、果物市場
    - 火山弾が定期的に降る
 
+### BGM
+
+ステージ曲は `Assets/Survivors/Resources/Music/` に置いた音声ファイルを使う（現在は3ステージとも「Pasta la vista」）。タイトルとボス戦は実行時に合成するタランテラのまま。
+
+- **曲の追加**：上記フォルダーに置くと、初回インポート時にストリーミング再生（Vorbis）に設定される。音量は -15 LUFS 前後でマスタリングした曲が合成BGMと揃うように合わせてある。
+- **ステージごとの曲**：`GameData.cs` の各ステージの `music` に拡張子なしのファイル名を書く。空なら合成BGMに戻る。
+- **ボス曲**：`bossMusic` に書くとボス出現時にその曲へ切り替わる。空なら合成のボス曲。
+- **ステージ途中の切り替え**：`events` に `new StageEvent { time = 300, type = StageEventType.Music, music = "曲名" }` を足すと、その時刻から2秒かけてクロスフェードする。
+
 ## 構成
 
 コードは `Assets/Survivors/`（名前空間 `PastaSurvivors`）。旧プロトタイプのコードとは独立しており、パスタの折れるメッシュ（`PastaVisual`）と折れる音（`PastaAudio`）だけを流用している。
@@ -129,8 +138,9 @@
 | `Scripts/World/Arena.cs` | 壁・水路・障害物の当たり判定、視線判定、敵の経路探索（フローフィールド） |
 | `Scripts/World/Hazards.cs` | 車道の車、火山弾 |
 | `Scripts/UI/` | HUD、メニュー、ドット絵アイコン（コードで描画） |
-| `Scripts/Audio/Audio.cs` | 効果音とタランテラBGMを実行時に合成 |
+| `Scripts/Audio/Audio.cs` | 効果音とタランテラBGMを実行時に合成。ステージ曲（`Resources/Music/`）の再生とクロスフェード |
 | `Editor/SurvivorsBuild.cs` | シーン生成とビルド |
+| `Editor/MusicImport.cs` | `Resources/Music/` の曲をストリーミング再生でインポート |
 | `Tests/` | 開発版専用の自動テストとバランス計測ボット |
 
 ## 検証
@@ -151,6 +161,7 @@ PastaSurvivors.exe -survivors-smoke -screen-fullscreen 0 -screen-width 1600 -scr
 - 特殊武器5種の取得と使用
 - 家を回り込む経路探索、回復の泉の枯渇、車道の車、火山弾
 - ゲームオーバー、リトライ、ポーズ
+- ステージ曲の再生、ボス出現時の曲切り替え
 
 バランス確認用に、無敵なしで1ステージを遊ぶボットもある（`[ステージ0〜2] [速度倍率] [キャラ0〜2] [ショップLv]`）。成長と被ダメージの内訳を `Verification/bot-stage*.txt` に記録する。
 

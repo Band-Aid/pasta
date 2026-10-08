@@ -181,6 +181,9 @@ namespace PastaSurvivors
                         G.Game.OnBossSpawned();
                         break;
                     }
+                case StageEventType.Music:
+                    G.Game.Music.PlayTrack(ev.music, crossfade: true);
+                    break;
             }
             if (!string.IsNullOrEmpty(ev.banner))
                 G.Fx.Banner(ev.banner, ev.type == StageEventType.Boss ? new Color(1f, 0.4f, 0.3f) : ev.type == StageEventType.Elite ? new Color(0.6f, 1f, 0.6f) : new Color(1f, 0.85f, 0.4f));

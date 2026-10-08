@@ -172,7 +172,7 @@ namespace PastaSurvivors
             Menus.Close();
             G.Hud.SetVisible(true);
             G.Hud.StageIntro(G.Stage.name, G.Stage.sub);
-            Music.PlayTheme(1 + stage);
+            if (!Music.PlayTrack(G.Stage.music)) Music.PlayTheme(1 + stage);
             Music.Duck(false);
         }
 
@@ -505,7 +505,10 @@ namespace PastaSurvivors
 
         // ---------------- ends ----------------
 
-        public void OnBossSpawned() => Music.PlayTheme(4);
+        public void OnBossSpawned()
+        {
+            if (!Music.PlayTrack(G.Stage.bossMusic)) Music.PlayTheme(4);
+        }
 
         /// <summary>A boss with another form was beaten: the Italians scatter while she changes.</summary>
         public void OnBossMorphing(Enemy boss)

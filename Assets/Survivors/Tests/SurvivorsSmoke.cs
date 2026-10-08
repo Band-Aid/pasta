@@ -191,6 +191,7 @@ namespace PastaSurvivors
             yield return Real(1.5f);
             Check(game.State == GameState.Playing && G.Player != null && G.Player.Weapons.Count == 1, "Run starts with the character's weapon");
             Check(G.Player.Might > 1.04f, "Permanent shop bonus applies to the run");
+            Check(game.Music.Current == G.Stage.music, $"Roma plays its recorded stage track ({game.Music.Current})");
             G.Player.God = true;
             circling = true;
             Controls.TestMove = Vector2.right;
@@ -379,6 +380,7 @@ namespace PastaSurvivors
             G.RunTime = G.Stage.duration * G.Waves.TimeScale - 0.5f;
             yield return Real(3f);
             Check(G.Waves.BossSpawned && G.Enemies.Boss != null, "Boss arrives at the end of the timer");
+            Check(game.Music.Current == "Tarantella 4", $"Boss arrival switches to the boss theme ({game.Music.Current})");
             if (G.Enemies.Boss != null)
             {
                 G.Enemies.Boss.pos = G.Player.Position + Vector3.forward * 8f;

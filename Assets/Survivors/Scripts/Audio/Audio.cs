@@ -103,14 +103,28 @@ namespace PastaSurvivors
         }
     }
 
-    /// <summary>A procedurally synthesised tarantella: mandolin tremolo, oom-pah bass, accordion and tambourine.</summary>
+    /// <summary>
+    /// Background music. Stages play recorded tracks from Resources/Music, named in <see cref="StageDef"/>.
+    /// The title, the boss and any stage without a track use a procedurally synthesised tarantella:
+    /// mandolin tremolo, oom-pah bass, accordion and tambourine.
+    /// </summary>
     public class Music : MonoBehaviour
     {
         private const int Rate = 32000;
-        private AudioSource source;
+        private const float NormalLevel = 0.35f, DuckedLevel = 0.12f, CrossfadeSeconds = 2f;
+        /// <summary>At this gain a track mastered near -15 LUFS plays level with the synthesised themes (about -26 LUFS in game).</summary>
+        private const float RecordedGain = 1.45f;
+        // Two sources so a track change can crossfade; `active` is the one fading in.
+        private readonly AudioSource[] sources = new AudioSource[2];
+        private readonly float[] fades = new float[2], gains = new float[2];
+        private int active;
+        private float level = NormalLevel;
+        private bool ducked;
         private readonly Dictionary<int, AudioClip> cache = new Dictionary<int, AudioClip>();
-        private float targetVolume = 0.35f;
+        private readonly Dictionary<string, AudioClip> tracks = new Dictionary<string, AudioClip>();
         public float Volume = 0.55f;
+        /// <summary>Clip name of the current music: the track's file name, or "Tarantella N" for a synthesised theme.</summary>
+        public string Current => sources[active] != null && sources[active].clip != null ? sources[active].clip.name : null;
 
         // A-minor melody, 16 bars of 6 eighth notes. -1 = rest, -2 = hold previous (tremolo).
         private static readonly int[] Melody =
@@ -138,15 +152,38 @@ namespace PastaSurvivors
 
         public void Init()
         {
-            source = gameObject.AddComponent<AudioSource>();
-            source.loop = true;
-            source.playOnAwake = false;
-            source.spatialBlend = 0f;
-            source.ignoreListenerPause = true;
+            for (int i = 0; i < sources.Length; i++)
+            {
+                var source = gameObject.AddComponent<AudioSource>();
+                source.loop = true;
+                source.playOnAwake = false;
+                source.spatialBlend = 0f;
+                source.ignoreListenerPause = true;
+                source.volume = 0f;
+                sources[i] = source;
+            }
         }
 
-        /// <summary>Theme index: 0 title, 1 Roma, 2 Venezia, 3 Napoli, 4 boss.</summary>
-        public void PlayTheme(int theme)
+        /// <summary>
+        /// Plays a recorded track from Resources/Music by file name (no extension). Returns false when there is no
+        /// such track so the caller can fall back to a synthesised theme. Cuts straight in unless crossfading.
+        /// </summary>
+        public bool PlayTrack(string track, bool crossfade = false)
+        {
+            if (string.IsNullOrEmpty(track)) return false;
+            if (!tracks.TryGetValue(track, out var clip))
+            {
+                clip = Resources.Load<AudioClip>("Music/" + track);
+                if (clip == null) Debug.LogWarning("Music track not found: Resources/Music/" + track);
+                tracks[track] = clip;
+            }
+            if (clip == null) return false;
+            Play(clip, RecordedGain, crossfade);
+            return true;
+        }
+
+        /// <summary>Synthesised theme index: 0 title, 1 Roma, 2 Venezia, 3 Napoli, 4 boss.</summary>
+        public void PlayTheme(int theme, bool crossfade = false)
         {
             if (!cache.TryGetValue(theme, out var clip))
             {
@@ -155,19 +192,55 @@ namespace PastaSurvivors
                 clip = Synthesize(transpose, tempo, theme);
                 cache[theme] = clip;
             }
-            if (source.clip == clip && source.isPlaying) return;
-            source.clip = clip;
-            source.volume = Volume * 0.35f;
-            source.Play();
+            Play(clip, 1f, crossfade);
         }
 
-        public void Stop() => source.Stop();
-        public void Duck(bool ducked) => targetVolume = ducked ? 0.12f : 0.35f;
+        private void Play(AudioClip clip, float gain, bool crossfade)
+        {
+            if (sources[active].clip == clip && sources[active].isPlaying) return;
+            int next = 1 - active;
+            var source = sources[next];
+            if (!crossfade)
+            {
+                sources[active].Stop();
+                fades[active] = 0f;
+            }
+            // Crossfading back to a track that is still fading out picks it up where it is.
+            if (!crossfade || source.clip != clip || !source.isPlaying)
+            {
+                source.clip = clip;
+                source.Play();
+                fades[next] = crossfade ? 0f : 1f;
+            }
+            gains[next] = gain;
+            active = next;
+            ApplyVolumes();
+        }
+
+        public void Stop()
+        {
+            foreach (var source in sources) source.Stop();
+            fades[0] = fades[1] = 0f;
+        }
+
+        public void Duck(bool value) => ducked = value;
 
         private void Update()
         {
-            if (source == null) return;
-            source.volume = Mathf.MoveTowards(source.volume, targetVolume * Volume, Time.unscaledDeltaTime * 0.5f);
+            if (sources[0] == null) return;
+            float dt = Time.unscaledDeltaTime;
+            level = Mathf.MoveTowards(level, ducked ? DuckedLevel : NormalLevel, dt * 0.9f);
+            for (int i = 0; i < sources.Length; i++)
+            {
+                fades[i] = Mathf.MoveTowards(fades[i], i == active ? 1f : 0f, dt / CrossfadeSeconds);
+                if (i != active && fades[i] <= 0f && sources[i].isPlaying) sources[i].Stop();
+            }
+            ApplyVolumes();
+        }
+
+        private void ApplyVolumes()
+        {
+            for (int i = 0; i < sources.Length; i++) sources[i].volume = fades[i] * level * Volume * gains[i];
         }
 
         private static float Midi(int note) => 440f * Mathf.Pow(2f, (note - 69) / 12f);
