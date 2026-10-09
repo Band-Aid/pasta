@@ -365,18 +365,7 @@ namespace PastaSurvivors
             var label = UiKit.Label(row.transform, "Volume", "", 32, UiKit.Cream, TextAnchor.MiddleLeft,
                 new Vector2(0.5f, 1f), new Vector2(0, -4), new Vector2(608, 44));
             var track = UiKit.Rect(row.transform, "Slider", new Vector2(0.5f, 1f), new Vector2(0, -58), new Vector2(608, 44));
-            UiKit.Img(track, "Track", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(608, 10), new Color(0.35f, 0.3f, 0.25f));
-            var fill = UiKit.Fill(UiKit.Img(track, "Fill", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(608, 10), UiKit.Gold));
-            var handle = UiKit.Img(track, "Handle", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(24, 36), UiKit.Cream, null, new Vector2(0.5f, 0.5f));
-            var slider = track.gameObject.AddComponent<Slider>();
-            slider.navigation = new Navigation { mode = Navigation.Mode.None };
-            slider.transition = Selectable.Transition.None;
-            slider.minValue = 0f;
-            slider.maxValue = 100f;
-            slider.wholeNumbers = true;
-            slider.fillRect = fill.rectTransform;
-            slider.handleRect = handle.rectTransform;
-            slider.targetGraphic = handle;
+            var slider = UiKit.PercentSlider(track);
             slider.SetValueWithoutNotify(value * 100f);
             label.text = $"{name}   {slider.value:0}%";
             slider.onValueChanged.AddListener(percent =>
@@ -419,18 +408,7 @@ namespace PastaSurvivors
             UiKit.Label(panel.transform, "Scope", "徒歩の町の人（乗り物・ボスを除く）", 21, UiKit.Cream, TextAnchor.MiddleCenter,
                 new Vector2(0.5f, 1f), new Vector2(0, -74), new Vector2(520, 32));
             gestureTrack = UiKit.Rect(panel.transform, "GestureSlider", new Vector2(0.5f, 1f), new Vector2(0, -116), new Vector2(480, 48));
-            UiKit.Img(gestureTrack, "Track", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(480, 10), new Color(0.35f, 0.3f, 0.25f));
-            var fill = UiKit.Fill(UiKit.Img(gestureTrack, "Fill", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(480, 10), UiKit.Gold));
-            var handle = UiKit.Img(gestureTrack, "Handle", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(24, 36), UiKit.Cream, null, new Vector2(0.5f, 0.5f));
-            gestureSlider = gestureTrack.gameObject.AddComponent<Slider>();
-            gestureSlider.navigation = new Navigation { mode = Navigation.Mode.None };
-            gestureSlider.transition = Selectable.Transition.None;
-            gestureSlider.minValue = 0f;
-            gestureSlider.maxValue = 100f;
-            gestureSlider.wholeNumbers = true;
-            gestureSlider.fillRect = fill.rectTransform;
-            gestureSlider.handleRect = handle.rectTransform;
-            gestureSlider.targetGraphic = handle;
+            gestureSlider = UiKit.PercentSlider(gestureTrack);
             gestureSlider.SetValueWithoutNotify(G.Enemies.GesturePercent);
             label.text = $"身振り発生率  {gestureSlider.value:0}%";
             gestureSlider.onValueChanged.AddListener(value =>

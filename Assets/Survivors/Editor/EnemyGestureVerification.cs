@@ -16,6 +16,7 @@ namespace PastaSurvivors.EditorTools
         [MenuItem("Pasta Survivors/Verify Enemy Gestures")]
         public static void Check()
         {
+            MenuLayoutVerification.Check();
             var randomState = UnityEngine.Random.state;
             var root = new GameObject("Temporary gesture checks") { hideFlags = HideFlags.HideAndDontSave };
             int gesturing = 0, quiet = 0;
