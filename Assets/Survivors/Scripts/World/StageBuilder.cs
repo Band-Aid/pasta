@@ -575,106 +575,141 @@ namespace PastaSurvivors
 
         private static Arena Roma(Transform root)
         {
-            arena = new Arena(new Vector2(-48, -48), new Vector2(48, 48));
+            arena = new Arena(new Vector2(-80, -72), new Vector2(80, 72));
             arena.spawn = new Vector3(0f, 0f, -3f);
+            // A connected loop around the piazza: each district offers a different way to handle a pursuing horde.
+            // These weights only affect the enemy kinds available in the current time-based wave.
+            arena.AddDistrict(new Rect(-80, -45, 160, 14), "南の車道", "車を避けながら敵を車道へ誘導", new Color(0.85f, 0.48f, 0.24f), 1.05f, 0.95f,
+                (EnemyKind.Vespista, 3f), (EnemyKind.Tifoso, 1.4f));
+            arena.AddDistrict(new Rect(-74, 18, 54, 48), "トラステヴェレの路地", "家の陰で投擲を避け、通路で迎撃", new Color(0.78f, 0.62f, 0.4f), 0.9f, 1.15f,
+                (EnemyKind.Mamma, 3f), (EnemyKind.Chef, 1.6f), (EnemyKind.Vespista, 0.4f));
+            arena.AddDistrict(new Rect(20, 18, 54, 48), "フォロ・ロマーノの遺跡", "壁や柱を回り込み、射線を切ろう", new Color(0.76f, 0.46f, 0.35f), 1.1f, 0.9f,
+                (EnemyKind.Chef, 2.5f), (EnemyKind.Mamma, 2f));
+            arena.AddDistrict(new Rect(-74, -26, 50, 40), "カンポ・デ・フィオーリ市場", "屋台の間を抜け、樽で補給しよう", new Color(0.88f, 0.67f, 0.25f), 1.15f, 0.85f,
+                (EnemyKind.Tifoso, 2.3f), (EnemyKind.Mamma, 0.75f), (EnemyKind.Vespista, 0.4f));
+            arena.AddDistrict(new Rect(26, -27, 48, 43), "泉の庭園", "追手を振り切り、泉でひと休み", new Color(0.35f, 0.65f, 0.4f), 0.7f, 1.5f,
+                (EnemyKind.Mamma, 0.5f), (EnemyKind.Vespista, 0.5f));
+            arena.AddDistrict(new Rect(-75, -69, 150, 20), "トレヴィの泉・南の遊歩道", "車道を渡り、泉まで退避しよう", new Color(0.4f, 0.63f, 0.73f), 0.85f, 1.2f);
+            arena.AddDistrict(new Rect(-24, -28, 48, 94), "カンピドリオ広場", "広い場所で包囲をほどこう", new Color(0.56f, 0.62f, 0.78f), 1f, 1f);
             Lighting(new Color(1f, 0.93f, 0.8f), 1.25f, new Vector3(50, -35, 0), new Color(0.62f, 0.66f, 0.72f), new Color(0.45f, 0.38f, 0.32f),
                 new Color(0.86f, 0.8f, 0.72f), new Color(0.62f, 0.78f, 0.95f));
             Ground(root, Mats.Cobble, arena.min, arena.max, 5f, 45f);
 
-            // Central piazza with the healing fountain (Campidoglio-style inlay).
+            // Broad piazza and a north forecourt: space to circle and scatter the horde, with little cover.
             for (int ring = 0; ring < 7; ring++)
             {
-                float d = 30f - ring * 3.6f;
+                float d = 40f - ring * 4.8f;
                 kit.Cyl(new Vector3(0, 0.02f + ring * 0.006f, 0), new Vector3(d, 0.04f, d), ring % 2 == 0 ? new Color(0.8f, 0.74f, 0.64f) : new Color(0.73f, 0.67f, 0.58f), default, 48);
             }
             for (int i = 0; i < 12; i++)
-                kit.Box(new Vector3(0, 0.07f, 0), new Vector3(0.18f, 0.02f, 26f), new Color(0.84f, 0.79f, 0.7f), new Vector3(0, i * 15f, 0));
+                kit.Box(new Vector3(0, 0.07f, 0), new Vector3(0.18f, 0.02f, 36f), new Color(0.84f, 0.79f, 0.7f), new Vector3(0, i * 15f, 0));
+            kit.Box(new Vector3(0, 0.025f, 49f), new Vector3(36f, 0.04f, 38f), new Color(0.8f, 0.76f, 0.66f));
             Flush(root, "Piazza", false);
             Fountain(new Vector3(0f, 0f, 7f), 3.2f);
             Obelisk(new Vector3(-11f, 0f, -9f));
             // The healing Trevi fountain sits across the road: worth the trip, not a place to camp.
-            Fountain(new Vector3(-30f, 0f, -41f), 2.4f);
-            HealArea(new Vector3(-30f, 0f, -41f), 5.2f, "トレヴィの泉");
+            Fountain(new Vector3(-48f, 0f, -59f), 2.4f);
+            HealArea(new Vector3(-48f, 0f, -59f), 5.2f, "トレヴィの泉");
 
             // South: the traffic road. Cars flatten everything on it — lure the horde across.
-            Road(new Vector3(-48f, 0f, -30f), new Vector3(48f, 0f, -30f), 6.5f);
+            Road(new Vector3(-80f, 0f, -38f), new Vector3(80f, 0f, -38f), 8f);
+            foreach (float x in new[] { -48f, 48f })
+                for (int i = 0; i < 7; i++)
+                    kit.Box(new Vector3(x, 0.07f, -38f + (i - 3) * 8f / 7f), new Vector3(3f, 0.02f, 8f / 14f), Color.white);
 
             // North-west: narrow alleys between low houses.
             Color[] houses = { new Color(0.88f, 0.62f, 0.32f), new Color(0.82f, 0.45f, 0.3f), new Color(0.92f, 0.78f, 0.5f), new Color(0.86f, 0.56f, 0.5f) };
-            House(new Vector3(-40f, 0f, 25f), new Vector2(10f, 10f), 3.4f, houses[0]);
-            House(new Vector3(-26.5f, 0f, 25f), new Vector2(10f, 10f), 3.4f, houses[1]);
-            House(new Vector3(-40f, 0f, 39f), new Vector2(10f, 10f), 3.4f, houses[2]);
-            House(new Vector3(-26.5f, 0f, 39f), new Vector2(10f, 10f), 3.4f, houses[3]);
-            Pedestal(new Vector3(-33.25f, 0f, 32f));
+            int houseIndex = 0;
+            foreach (float x in new[] { -62f, -46f, -30f })
+                foreach (float z in new[] { 28f, 44f, 60f })
+                {
+                    // 4 m side alleys and 6 m cross streets, with exits on every side of the block.
+                    House(new Vector3(x, 0f, z), new Vector2(12f, 10f), 3.4f + (houseIndex % 3) * 0.5f, houses[houseIndex % houses.Length]);
+                    houseIndex++;
+                }
+            Pedestal(new Vector3(-54f, 0f, 52f));
+            Flush(root, "Piazza and alleys");
 
             // North-east: the Forum ruins — broken walls and columns to break line of sight.
-            RuinWall(new Vector3(22f, 0f, 21f), new Vector2(10f, 1.2f), 2.8f);
-            RuinWall(new Vector3(29.5f, 0f, 30f), new Vector2(1.2f, 10f), 2.8f);
-            RuinWall(new Vector3(40f, 0f, 21f), new Vector2(8f, 1.2f), 2.4f);
-            RuinWall(new Vector3(24f, 0f, 40f), new Vector2(9f, 1.2f), 2.6f);
-            RuinWall(new Vector3(41f, 0f, 36f), new Vector2(1.2f, 8f), 2.6f);
-            foreach (var c in new[] { new Vector3(19f, 0, 30f), new Vector3(24f, 0, 30f), new Vector3(36f, 0, 42f), new Vector3(36f, 0, 28f), new Vector3(44f, 0, 44f), new Vector3(18f, 0, 44f), new Vector3(35f, 0, 16f) })
+            kit.Box(new Vector3(47f, 0.02f, 42f), new Vector3(52f, 0.03f, 46f), new Color(0.72f, 0.65f, 0.53f));
+            RuinWall(new Vector3(29f, 0f, 25f), new Vector2(14f, 1.4f), 2.8f);
+            RuinWall(new Vector3(55f, 0f, 25f), new Vector2(18f, 1.4f), 2.4f);
+            RuinWall(new Vector3(42f, 0f, 38f), new Vector2(1.4f, 18f), 2.8f);
+            RuinWall(new Vector3(55f, 0f, 53f), new Vector2(1.4f, 14f), 2.6f);
+            RuinWall(new Vector3(29f, 0f, 59f), new Vector2(14f, 1.4f), 2.6f);
+            RuinWall(new Vector3(69f, 0f, 44f), new Vector2(1.4f, 18f), 2.4f);
+            foreach (var c in new[] { new Vector3(24f, 0, 42f), new Vector3(34f, 0, 48f), new Vector3(60f, 0, 39f), new Vector3(67f, 0, 59f), new Vector3(41f, 0, 64f), new Vector3(26f, 0, 63f), new Vector3(62f, 0, 18f) })
                 Column(c, R(2.5f, 6f));
-            Pedestal(new Vector3(35f, 0f, 35f));
+            Pedestal(new Vector3(51f, 0f, 43f));
 
             // West: Campo de' Fiori market — lanes between stall rows, and lots of barrels.
-            MarketArea(new Vector3(-31f, 0f, -1f), 14f, "カンポ・デ・フィオーリ市場");
-            foreach (float x in new[] { -41f, -31f, -21f })
+            MarketArea(new Vector3(-49f, 0f, -5f), 18f, "カンポ・デ・フィオーリ市場");
+            foreach (float x in new[] { -64f, -49f, -34f })
             {
-                StallRow(new Vector3(x, 0f, -8f), new Vector2(2f, 9f));
-                StallRow(new Vector3(x, 0f, 7f), new Vector2(2f, 9f));
+                StallRow(new Vector3(x, 0f, -18f), new Vector2(2.5f, 14f));
+                StallRow(new Vector3(x, 0f, 8f), new Vector2(2.5f, 14f));
             }
-            Pedestal(new Vector3(-36f, 0f, -0.5f));
+            // Offset counters make the central aisle a zigzag, with room to pass at either end.
+            StallRow(new Vector3(-57f, 0f, -4f), new Vector2(9f, 2.5f));
+            StallRow(new Vector3(-41f, 0f, -4f), new Vector2(9f, 2.5f));
+            Pedestal(new Vector3(-57f, 0f, -8f));
 
-            // East: a hedge garden with four gates around a statue.
-            Hedge(new Vector3(26.5f, 0f, 9f), new Vector2(6f, 1.2f));
-            Hedge(new Vector3(38.5f, 0f, 9f), new Vector2(6f, 1.2f));
-            Hedge(new Vector3(26.5f, 0f, -11f), new Vector2(6f, 1.2f));
-            Hedge(new Vector3(38.5f, 0f, -11f), new Vector2(6f, 1.2f));
-            Hedge(new Vector3(23f, 0f, 5f), new Vector2(1.2f, 7f));
-            Hedge(new Vector3(23f, 0f, -7f), new Vector2(1.2f, 7f));
-            Hedge(new Vector3(42f, 0f, 5f), new Vector2(1.2f, 7f));
-            Hedge(new Vector3(42f, 0f, -7f), new Vector2(1.2f, 7f));
-            Column(new Vector3(32.5f, 0f, -1f), 3.5f, 1f);
-            Pedestal(new Vector3(32.5f, 0f, 4.5f));
+            // East: lighter reinforcement and a limited healing reservoir, with four 6 m escape gates.
+            kit.Box(new Vector3(48f, 0.02f, -5f), new Vector3(34f, 0.03f, 32f), new Color(0.42f, 0.55f, 0.34f));
+            foreach (float x in new[] { 39f, 57f })
+            {
+                Hedge(new Vector3(x, 0f, 12f), new Vector2(12f, 1.2f));
+                Hedge(new Vector3(x, 0f, -22f), new Vector2(12f, 1.2f));
+            }
+            foreach (float x in new[] { 30f, 66f })
+            {
+                Hedge(new Vector3(x, 0f, 4f), new Vector2(1.2f, 12f));
+                Hedge(new Vector3(x, 0f, -14f), new Vector2(1.2f, 12f));
+            }
+            Fountain(new Vector3(48f, 0f, -4f), 2.4f);
+            HealArea(new Vector3(48f, 0f, -4f), 6f, "庭園の泉");
+            Pedestal(new Vector3(53f, 0f, -13f));
 
             // South of the road: parked cars and a pedestal to tempt you across.
-            foreach (var c in new[] { new Vector3(-44f, 0, -39f), new Vector3(-16f, 0, -40f), new Vector3(14f, 0, -41f), new Vector3(20f, 0, -40f) })
+            foreach (var c in new[] { new Vector3(-66f, 0, -61f), new Vector3(-24f, 0, -61f), new Vector3(30f, 0, -61f), new Vector3(62f, 0, -61f) })
             {
                 Models.CarGeometry(kit, Matrix4x4.TRS(c, Quaternion.Euler(0, 90f + R(-8, 8), 0), Vector3.one * 1.2f), Pick(new[] { new Color(0.85f, 0.18f, 0.15f), new Color(0.95f, 0.9f, 0.75f), new Color(0.3f, 0.5f, 0.8f), new Color(0.55f, 0.85f, 0.75f) }));
                 arena.AddObstacle(c, 1.7f, true);
             }
-            Fence(new Vector3(-6f, 0f, -38f), new Vector2(10f, 0.3f));
-            Pedestal(new Vector3(33f, 0f, -41f));
+            Fence(new Vector3(-6f, 0f, -57f), new Vector2(10f, 0.3f));
+            Pedestal(new Vector3(48f, 0f, -59f));
 
             // North: church steps.
-            for (int i = 0; i < 3; i++) kit.Box(new Vector3(0f, 0.12f + i * 0.12f, 45.5f + i * 0.8f), new Vector3(16f - i * 2f, 0.24f + i * 0.24f, 1.6f), Stone);
-            Pedestal(new Vector3(0f, 0f, 40f));
+            for (int i = 0; i < 3; i++) kit.Box(new Vector3(0f, 0.12f + i * 0.12f, 68.5f + i * 0.8f), new Vector3(16f - i * 2f, 0.24f + i * 0.24f, 1.6f), Stone);
+            Pedestal(new Vector3(0f, 0f, 60f));
 
             Color[] facades = { new Color(0.88f, 0.62f, 0.32f), new Color(0.82f, 0.45f, 0.3f), new Color(0.92f, 0.78f, 0.5f), new Color(0.86f, 0.56f, 0.5f), new Color(0.95f, 0.86f, 0.66f) };
             Color[] shutters = { new Color(0.22f, 0.4f, 0.25f), new Color(0.45f, 0.28f, 0.18f), new Color(0.3f, 0.45f, 0.35f) };
             Flush(root, "Districts");
-            Row(new Vector3(-58, 0, 49), Vector3.right, Vector3.back, 116, 8, new Vector2(10, 15), facades, shutters, 0);
-            Row(new Vector3(49, 0, 49), Vector3.back, Vector3.left, 100, 8, new Vector2(9, 13), facades, shutters, 0);
-            Row(new Vector3(-49, 0, -51), Vector3.forward, Vector3.right, 100, 8, new Vector2(9, 13), facades, shutters, 0);
-            Row(new Vector3(-70, 0, -64), Vector3.right, Vector3.forward, 140, 8, new Vector2(10, 14), facades, shutters, 0);
+            Row(new Vector3(-90, 0, 73), Vector3.right, Vector3.back, 180, 8, new Vector2(10, 15), facades, shutters, 0);
+            Row(new Vector3(81, 0, 73), Vector3.back, Vector3.left, 146, 8, new Vector2(9, 13), facades, shutters, 0);
+            Row(new Vector3(-81, 0, -73), Vector3.forward, Vector3.right, 146, 8, new Vector2(9, 13), facades, shutters, 0);
+            Row(new Vector3(-95, 0, -88), Vector3.right, Vector3.forward, 190, 8, new Vector2(10, 14), facades, shutters, 0);
             Flush(root, "Buildings");
-            for (float x = -48; x <= 48; x += 1.2f) kit.Cyl(new Vector3(x, 0.45f, -49.5f), new Vector3(0.3f, 0.9f, 0.3f), Stone, default, 8);
-            kit.Box(new Vector3(0, 0.95f, -49.5f), new Vector3(97f, 0.15f, 0.5f), Stone);
-            kit.Box(new Vector3(0, 0.05f, -49.5f), new Vector3(97f, 0.15f, 0.6f), Stone);
-            Colosseum(new Vector3(10, 0, 95), 38f);
+            for (float x = -80; x <= 80; x += 1.2f) kit.Cyl(new Vector3(x, 0.45f, -73.5f), new Vector3(0.3f, 0.9f, 0.3f), Stone, default, 8);
+            kit.Box(new Vector3(0, 0.95f, -73.5f), new Vector3(161f, 0.15f, 0.5f), Stone);
+            kit.Box(new Vector3(0, 0.05f, -73.5f), new Vector3(161f, 0.15f, 0.6f), Stone);
+            Colosseum(new Vector3(10, 0, 130), 38f);
             Flush(root, "Backdrop");
 
-            Bunting(new Vector3(-30, 9, 44), new Vector3(-10, 9.5f, 44), 12);
-            Bunting(new Vector3(10, 9, 44), new Vector3(35, 9, 44), 14);
-            Laundry(new Vector3(-35f, 3.6f, 20f), new Vector3(-31.5f, 3.6f, 30f));
-            Laundry(new Vector3(-45f, 3.6f, 32f), new Vector3(-21f, 3.8f, 32f));
+            Bunting(new Vector3(-30, 9, 66), new Vector3(-10, 9.5f, 66), 12);
+            Bunting(new Vector3(10, 9, 66), new Vector3(35, 9, 66), 14);
+            Laundry(new Vector3(-57f, 4.1f, 28f), new Vector3(-51f, 4.1f, 28f));
+            Laundry(new Vector3(-67f, 4.1f, 52f), new Vector3(-25f, 4.3f, 52f));
             foreach (var c in new[] { new Vector3(9f, 0, -9f), new Vector3(-8f, 0, 13f), new Vector3(11f, 0, 12f), new Vector3(-13f, 0, 2f) })
                 Cafe(c, rng.NextDouble() < 0.5 ? new Color(0.8f, 0.15f, 0.15f) : new Color(0.15f, 0.45f, 0.25f));
-            for (int i = 0; i < 5; i++) Vespa(RandomSpot(1f), Pick(new[] { new Color(0.55f, 0.85f, 0.75f), new Color(0.85f, 0.2f, 0.2f), new Color(0.95f, 0.9f, 0.75f), new Color(0.3f, 0.5f, 0.85f) }));
-            for (int i = 0; i < 8; i++) Planter(RandomSpot(0.8f));
-            for (int x = -40; x <= 40; x += 16) Lamp(new Vector3(x, 0, 44));
-            for (int x = -44; x <= 44; x += 11) { Lamp(new Vector3(x, 0, -26f)); Lamp(new Vector3(x + 5f, 0, -34f)); }
+            // Keep clutter beside the main routes; random props must not choke the designed escape gates.
+            foreach (var c in new[] { new Vector3(-72f, 0, 40f), new Vector3(-19f, 0, 24f), new Vector3(76f, 0, 36f), new Vector3(-72f, 0, -30f), new Vector3(70f, 0, -50f) })
+                if (Free(c, 1f)) Vespa(c, Pick(new[] { new Color(0.55f, 0.85f, 0.75f), new Color(0.85f, 0.2f, 0.2f), new Color(0.95f, 0.9f, 0.75f), new Color(0.3f, 0.5f, 0.85f) }));
+            foreach (var c in new[] { new Vector3(-18f, 0, 54f), new Vector3(18f, 0, 54f), new Vector3(-72f, 0, 66f), new Vector3(72f, 0, 66f), new Vector3(-74f, 0, -54f), new Vector3(74f, 0, -54f), new Vector3(22f, 0, -24f), new Vector3(-20f, 0, -24f) })
+                if (Free(c, 0.8f)) Planter(c);
+            for (int x = -72; x <= 72; x += 18) Lamp(new Vector3(x, 0, 68));
+            for (int x = -72; x <= 72; x += 18) { Lamp(new Vector3(x, 0, -32f)); Lamp(new Vector3(x + 5f, 0, -44f)); }
             Flush(root, "Props");
             return arena;
         }

@@ -33,6 +33,8 @@ namespace PastaSurvivors
         private Texture2D minimapTex;
         private readonly List<Image> mapDots = new List<Image>();
         private Image mapPlayer;
+        private RectTransform districtRoot;
+        private Text districtName, districtHint;
         private class Pointer { public RectTransform rt; public Image arrow, icon; }
         private readonly List<Pointer> pointers = new List<Pointer>();
 
@@ -118,6 +120,14 @@ namespace PastaSurvivors
             }
             mapPlayer = UiKit.Img(mapRt, "Me", new Vector2(0f, 0f), Vector2.zero, new Vector2(14, 14), UiKit.Gold, UiKit.Pill, new Vector2(0.5f, 0.5f));
 
+            // Above both the minimap and first-person radar, with room for a two-line tactical hint.
+            districtRoot = UiKit.Rect(root, "District", new Vector2(1f, 0f), new Vector2(-24, 346), new Vector2(400, 98), new Vector2(1f, 0f));
+            UiKit.Img(districtRoot, "Bg", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(400, 98), UiKit.Ink, UiKit.Round);
+            districtName = UiKit.Label(districtRoot, "Name", "", 24, UiKit.Cream, TextAnchor.UpperLeft, new Vector2(0f, 1f), new Vector2(12, -8), new Vector2(376, 34), pivot: new Vector2(0f, 1f));
+            districtHint = UiKit.Label(districtRoot, "Hint", "", 18, UiKit.Cream, TextAnchor.UpperLeft, new Vector2(0f, 1f), new Vector2(12, -42), new Vector2(376, 48), FontStyle.Normal, pivot: new Vector2(0f, 1f));
+            districtName.verticalOverflow = districtHint.verticalOverflow = VerticalWrapMode.Truncate;
+            districtRoot.gameObject.SetActive(false);
+
             // Screen-edge pointers toward specials, chests and the boss.
             for (int i = 0; i < 8; i++)
             {
@@ -170,6 +180,8 @@ namespace PastaSurvivors
                     int i = y * w + x;
                     var c = arena.CellCenter(x, y);
                     Color col = new Color(0.3f, 0.27f, 0.24f, 0.8f);
+                    var district = arena.DistrictAt(c);
+                    if (district != null) col = Color.Lerp(col, district.color, 0.4f);
                     foreach (var a in arena.areas)
                         if (new Vector2(c.x - a.c.x, c.z - a.c.y).magnitude < a.r)
                             col = a.kind == Arena.AreaKind.Heal ? new Color(0.25f, 0.55f, 0.3f, 0.9f) : new Color(0.55f, 0.4f, 0.2f, 0.85f);
@@ -196,6 +208,17 @@ namespace PastaSurvivors
         {
             var def = GameData.Special(id);
             Banner("特殊武器を入手：" + def.name + "（右クリック / F / Y）", new Color(1f, 0.85f, 0.4f));
+        }
+
+        private void UpdateDistrict(Player p)
+        {
+            bool show = G.Arena != null && G.Arena.districts.Count > 0;
+            if (districtRoot.gameObject.activeSelf != show) districtRoot.gameObject.SetActive(show);
+            if (!show) return;
+            var district = G.Arena.DistrictAt(p.Position);
+            districtName.text = district != null ? district.name : "ローマの街路";
+            districtName.color = district != null ? Color.Lerp(district.color, UiKit.Cream, 0.55f) : UiKit.Cream;
+            districtHint.text = district != null ? district.hint : "広場や泉へ抜ける道を探そう";
         }
 
         public void SetFirstPerson(bool on)
@@ -470,6 +493,7 @@ namespace PastaSurvivors
             else if (mainText.text.Length > 0) mainText.text = "";
             if (firstPerson) UpdateRadar(p);
             else UpdateMinimap(p);
+            UpdateDistrict(p);
             UpdateSpecial(p);
             UpdatePointers(p);
             if (G.Fx != null) G.Fx.Reticle(p.MouseGround, !firstPerson && p.MouseAiming && G.Playing);
