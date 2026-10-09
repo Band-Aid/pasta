@@ -101,6 +101,32 @@ namespace PastaSurvivors
             return img;
         }
 
+        public static Slider PercentSlider(RectTransform hitArea)
+        {
+            var track = Img(hitArea, "Track", new Vector2(0.5f, 0.5f), Vector2.zero,
+                new Vector2(0, 10), new Color(0.35f, 0.3f, 0.25f));
+            track.rectTransform.anchorMin = new Vector2(0f, 0.5f);
+            track.rectTransform.anchorMax = new Vector2(1f, 0.5f);
+            // Slider stretches its fill and handle vertically, even for a Filled image.
+            // Zero extra height keeps them inside these thin visual areas instead of the hit area.
+            var fill = Fill(Img(track.transform, "Fill", new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, Gold));
+            var handleArea = Rect(hitArea, "HandleArea", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(0, 36));
+            handleArea.anchorMin = new Vector2(0f, 0.5f);
+            handleArea.anchorMax = new Vector2(1f, 0.5f);
+            var handle = Img(handleArea, "Handle", new Vector2(0f, 0.5f), Vector2.zero,
+                new Vector2(24, 0), Cream, null, new Vector2(0.5f, 0.5f));
+            var slider = hitArea.gameObject.AddComponent<Slider>();
+            slider.navigation = new Navigation { mode = Navigation.Mode.None };
+            slider.transition = Selectable.Transition.None;
+            slider.minValue = 0f;
+            slider.maxValue = 100f;
+            slider.wholeNumbers = true;
+            slider.fillRect = fill.rectTransform;
+            slider.handleRect = handle.rectTransform;
+            slider.targetGraphic = handle;
+            return slider;
+        }
+
         public static Text Label(Transform parent, string name, string text, int size, Color color, TextAnchor align,
             Vector2 anchor, Vector2 pos, Vector2 box, FontStyle style = FontStyle.Bold, bool outline = true, Vector2? pivot = null)
         {

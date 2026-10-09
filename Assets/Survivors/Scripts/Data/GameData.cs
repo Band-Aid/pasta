@@ -296,7 +296,7 @@ namespace PastaSurvivors
                 new StageDef
                 {
                     index = 0, theme = StageTheme.Roma, name = "ローマ", sub = "トラステヴェレの広場", boss = EnemyKind.BossNonna,
-                    bossName = "グランデ・ノンナ", hpMul = 1f, damageMul = 1f, music = "Pasta la vista",
+                    bossName = "グランデ・ノンナ", hpMul = 1f, damageMul = 1f, music = "Pursuit of the Button_no1",
                     hpPerLevel = 0.02f, damagePerLevel = 0.006f, // the first stage stays forgiving for new players
                     phases = new[]
                     {
@@ -328,7 +328,7 @@ namespace PastaSurvivors
                 new StageDef
                 {
                     index = 1, theme = StageTheme.Venezia, name = "ヴェネツィア", sub = "サン・マルコの運河広場", boss = EnemyKind.BossCapitano,
-                    bossName = "イル・カピターノ", hpMul = 1.7f, damageMul = 1.15f, music = "Pasta la vista",
+                    bossName = "イル・カピターノ", hpMul = 1.7f, damageMul = 1.15f, music = "Pursuit of the Button_no1",
                     phases = new[]
                     {
                         new WavePhase { start = 0, minAlive = 12, interval = 1.3f, batch = 2, mix = M((EnemyKind.Signore, 8), (EnemyKind.Tifoso, 3)) },
@@ -357,7 +357,7 @@ namespace PastaSurvivors
                 new StageDef
                 {
                     index = 2, theme = StageTheme.Napoli, name = "ナポリ", sub = "ヴェスヴィオを望むピッツェリア通り", boss = EnemyKind.BossDon,
-                    bossName = "ドン・カルボナーラ", hpMul = 2.4f, damageMul = 1.3f, music = "Pasta la vista",
+                    bossName = "ドン・カルボナーラ", hpMul = 2.4f, damageMul = 1.3f, music = "Pursuit of the Button_no1",
                     phases = new[]
                     {
                         new WavePhase { start = 0, minAlive = 14, interval = 1.2f, batch = 2, mix = M((EnemyKind.Signore, 6), (EnemyKind.Tifoso, 5)) },
