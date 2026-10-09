@@ -240,34 +240,65 @@ namespace PastaSurvivors
             {
                 barrelTimer = Random.Range(7f, 11f);
                 int barrels = 0;
-                foreach (var e in G.Enemies.Active) if (e.IsProp) barrels++;
+                bool regional = G.Arena.districts.Count > 0;
+                Enemy distantBarrel = null;
+                float farthest = 60f * 60f;
+                foreach (var e in G.Enemies.Active)
+                {
+                    if (!e.IsProp) continue;
+                    barrels++;
+                    float distance = (e.pos - pp).sqrMagnitude;
+                    if (regional && distance > farthest) { farthest = distance; distantBarrel = e; }
+                }
+                // Roma now has several distant markets. Supply the nearby one instead of filling the original market first.
+                Arena.Area nearbyMarket = null;
+                float nearest = float.PositiveInfinity;
+                if (regional)
+                    foreach (var a in G.Arena.areas)
+                    {
+                        if (a.kind != Arena.AreaKind.Market) continue;
+                        float distance = (a.c - new Vector2(pp.x, pp.z)).sqrMagnitude;
+                        if (distance < nearest && distance < (a.r + 24f) * (a.r + 24f))
+                        { nearest = distance; nearbyMarket = a; }
+                    }
                 bool placed = false;
-                if (barrels < 10 && Random.value < 0.65f)
+                if ((barrels < 10 || distantBarrel != null) && Random.value < 0.65f)
                 {
                     foreach (var a in G.Arena.areas)
                     {
-                        if (a.kind != Arena.AreaKind.Market || Random.value < 0.4f) continue;
+                        if (a.kind != Arena.AreaKind.Market || (regional && a != nearbyMarket) || Random.value < 0.4f) continue;
                         for (int tries = 0; tries < 10 && !placed; tries++)
                         {
                             var off = Random.insideUnitCircle * a.r;
                             var at = new Vector3(a.c.x + off.x, 0f, a.c.y + off.y);
                             if (!G.Arena.Inside(at, 1.5f) || G.Arena.Blocked(at, 0.9f)) continue;
-                            G.Enemies.Spawn(EnemyKind.Barrel, at);
+                            RestockBarrel(at, barrels < 10 ? null : distantBarrel);
                             placed = true;
                         }
                         if (placed) break;
                     }
                 }
-                if (!placed && barrels < 6)
+                if (!placed && (barrels < 6 || distantBarrel != null))
                 {
                     for (int tries = 0; tries < 10; tries++)
                     {
                         var at = pp + Quaternion.Euler(0, Random.value * 360f, 0) * Vector3.forward * Random.Range(7f, 16f);
                         if (!G.Arena.Inside(at, 2f) || G.Arena.Blocked(at, 1.2f)) continue;
-                        G.Enemies.Spawn(EnemyKind.Barrel, at);
+                        RestockBarrel(at, barrels < 6 ? null : distantBarrel);
                         break;
                     }
                 }
+            }
+        }
+
+        private static void RestockBarrel(Vector3 at, Enemy reusable)
+        {
+            if (reusable == null) G.Enemies.Spawn(EnemyKind.Barrel, at);
+            else
+            {
+                // Reuse a barrel beyond sight without granting loot, increasing the prop cap, or touching the pursuing enemies.
+                reusable.pos = at;
+                reusable.ApplyTransform();
             }
         }
 

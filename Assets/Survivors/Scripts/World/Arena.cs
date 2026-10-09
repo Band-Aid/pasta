@@ -352,6 +352,7 @@ namespace PastaSurvivors
 
         public void BuildGrid()
         {
+            flowTarget = -1;
             GridW = Mathf.CeilToInt((max.x - min.x) / Cell);
             GridH = Mathf.CeilToInt((max.y - min.y) / Cell);
             int n = GridW * GridH;
@@ -408,6 +409,8 @@ namespace PastaSurvivors
                     if (!BlockedCells[ni]) { start = ni; break; }
                 }
             }
+            // Geometry is static after BuildGrid; keep the full field while the target cell is unchanged.
+            if (flowTarget == start) return;
             flowTarget = start;
             for (int i = 0; i < dist.Length; i++) dist[i] = Unreached;
             heapCount = 0;
