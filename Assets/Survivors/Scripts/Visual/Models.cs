@@ -4,49 +4,70 @@ using UnityEngine.Rendering;
 
 namespace PastaSurvivors
 {
-    /// <summary>Instance of an animated model: torso bobs, arms hang from the torso, legs swing from the hips.</summary>
+    /// <summary>
+    /// Instance of an animated model. The torso bobs (and vehicles lean) from the ground; the spine leans, sways and twists
+    /// from the hips and carries the arms, head and belly; legs swing from the hips.
+    /// </summary>
     public class Rig
     {
-        public Transform root, torso, legL, legR, armL, armR, held;
+        public Transform root, torso, spine, head, belly, prop, legL, legR, armL, armR, held, crank;
         public Transform[] wheels;
         public Renderer[] renderers;
         public float armRest, wheelRadius, wheelAngle;
+        public Vector3 restL, restR, bellyPos;
+        public Quaternion propBase = Quaternion.identity;
+        public PropMotion propMotion;
+        public Gait gait = Gait.Plain;
         public bool seated;
         public bool freeHandL, freeHandR;
+    }
+
+    public enum PropMotion { None, Wave, Spin, Swing }
+    public enum PropMount { Spine, ArmL, ArmR }
+
+    /// <summary>How a character moves; every type walks differently. Angles in degrees, distances in metres before scale.</summary>
+    public class Gait
+    {
+        public float cadence = 1f, stride = 34f, bob = 0.07f, armSwing = 28f, swingL = 1f, swingR = 1f;
+        /// <summary>Upper body: forward lean (negative leans back), hip sway and shoulder twist per step, arms held out.</summary>
+        public float lean, sway, twist, armOut;
+        /// <summary>Legs: knees out (bow legs) and toes out.</summary>
+        public float legOut, toeOut;
+        /// <summary>Head: static pitch (negative = chin up), nod per step, disapproving shakes, singing roll, steering.</summary>
+        public float headPitch, headNod = 2f, headShake, headRoll, headSteer;
+        /// <summary>Belly wobble that lags each step, and a vehicle's side-to-side weave.</summary>
+        public float belly, roll;
+
+        public static readonly Gait Plain = new Gait();
+
+        public Gait Clone() => (Gait)MemberwiseClone();
     }
 
     public class RigMeshes
     {
-        public Mesh body, leg, armL, armR;
-        public float hipX = 0.13f, hipY = 0.78f, shoulderX = 0.31f, shoulderY = 1.3f, armRest;
+        public Mesh body, leg, armL, armR, head, belly, prop;
+        /// <summary>Spine pivot height. Shoulders, head, belly and props are relative to the spine.</summary>
+        public float spineY;
+        public float hipX = 0.13f, hipY = 0.78f, shoulderX = 0.31f, shoulderY = 1.3f, shoulderZ, armRest;
+        public Vector3 headPos, bellyPos, propPos;
+        public Quaternion propRot = Quaternion.identity;
+        public PropMount propMount;
+        public PropMotion propMotion;
+        /// <summary>Arm rest poses (Euler); default hangs at armRest.</summary>
+        public Vector3? restL, restR;
+        public Gait gait;
         public bool seated;
         public bool freeHandL, freeHandR;
-        /// <summary>Optional wheels (origin at the hub) that roll with the ground speed.</summary>
+        /// <summary>Optional wheels (origin at the hub) that roll with the ground speed. They ride on the torso so the body and wheels bounce together.</summary>
         public Mesh wheel;
         public Vector3[] wheelPos;
         public float wheelRadius;
+        /// <summary>Optional pedal crank (origin at the bottom bracket) turning with the wheels.</summary>
+        public Mesh crank;
+        public Vector3 crankPos;
     }
 
-    public enum Hat { None, Toque, Boater, Fedora, Cap, PaperHat, Helmet, CaptainHat, Headband }
-    public enum Held { None, Slipper, Ladle, Oar, Pizza, Spoon, RollingPin, Pan, SelfieStick, GoldOar }
-
-    public class HumanSpec
-    {
-        public Color skin = new Color(0.96f, 0.78f, 0.62f), shirt = Color.white, pants = new Color(0.25f, 0.25f, 0.28f),
-            shoes = new Color(0.18f, 0.12f, 0.1f), hair = new Color(0.12f, 0.09f, 0.08f);
-        public Color? scarf, apron, skirt, stripes, jacket, tie, hatBand;
-        public int hairStyle;      // 0 short, 1 bun, 2 long, 3 bald ring, 4 ponytail
-        public int moustache;      // 0 none, 1 normal, 2 grand
-        public int glasses;        // 0 none, 1 round, 2 sunglasses
-        public bool angry = true, shorts, facePaint, backpack, belly, buttons, necklace, cigar;
-        public float hunch;
-        public float eyeSpacing = 0.1f, noseSize = 1f;
-        public Hat hat;
-        public Color hatColor = Color.white;
-        public Held heldR, heldL;
-    }
-
-    public static class Models
+    public static partial class Models
     {
         private static readonly Dictionary<(EnemyKind kind, int variant), RigMeshes> enemyMeshes = new Dictionary<(EnemyKind, int), RigMeshes>();
         private static readonly Dictionary<ShotKind, Mesh> shotMeshes = new Dictionary<ShotKind, Mesh>();
@@ -64,24 +85,40 @@ namespace PastaSurvivors
 
         public static Rig Build(RigMeshes m, Transform parent, string name)
         {
-            var rig = new Rig { armRest = m.armRest, seated = m.seated, freeHandL = m.freeHandL, freeHandR = m.freeHandR };
+            var rig = new Rig
+            {
+                armRest = m.armRest, seated = m.seated, freeHandL = m.freeHandL, freeHandR = m.freeHandR,
+                gait = m.gait ?? Gait.Plain, propMotion = m.propMotion, propBase = m.propRot, bellyPos = m.bellyPos,
+                restL = m.restL ?? new Vector3(m.armRest, 0f, m.seated ? 8f : -4f),
+                restR = m.restR ?? new Vector3(m.armRest, 0f, m.seated ? -8f : 4f)
+            };
             rig.root = new GameObject(name).transform;
             rig.root.SetParent(parent, false);
             var renderers = new List<Renderer>();
-            rig.torso = Part("Torso", rig.root, Vector3.zero, m.body, renderers);
+            rig.torso = Part("Torso", rig.root, Vector3.zero, null, renderers);
+            rig.spine = Part("Spine", rig.torso, new Vector3(0f, m.spineY, 0f), m.body, renderers);
             if (m.leg != null)
             {
                 rig.legL = Part("LegL", rig.root, new Vector3(-m.hipX, m.hipY, 0), m.leg, renderers);
                 rig.legR = Part("LegR", rig.root, new Vector3(m.hipX, m.hipY, 0), m.leg, renderers);
             }
-            rig.armL = Part("ArmL", rig.torso, new Vector3(-m.shoulderX, m.shoulderY, 0), m.armL, renderers);
-            rig.armR = Part("ArmR", rig.torso, new Vector3(m.shoulderX, m.shoulderY, 0), m.armR, renderers);
+            rig.armL = Part("ArmL", rig.spine, new Vector3(-m.shoulderX, m.shoulderY, m.shoulderZ), m.armL, renderers);
+            rig.armR = Part("ArmR", rig.spine, new Vector3(m.shoulderX, m.shoulderY, m.shoulderZ), m.armR, renderers);
+            if (m.head != null) rig.head = Part("Head", rig.spine, m.headPos, m.head, renderers);
+            if (m.belly != null) rig.belly = Part("Belly", rig.spine, m.bellyPos, m.belly, renderers);
+            if (m.prop != null)
+            {
+                var mount = m.propMount == PropMount.ArmL ? rig.armL : m.propMount == PropMount.ArmR ? rig.armR : rig.spine;
+                rig.prop = Part("Prop", mount, m.propPos, m.prop, renderers);
+                rig.prop.localRotation = m.propRot;
+            }
             if (m.wheel != null)
             {
                 rig.wheels = new Transform[m.wheelPos.Length];
-                for (int i = 0; i < m.wheelPos.Length; i++) rig.wheels[i] = Part("Wheel" + i, rig.root, m.wheelPos[i], m.wheel, renderers);
+                for (int i = 0; i < m.wheelPos.Length; i++) rig.wheels[i] = Part("Wheel" + i, rig.torso, m.wheelPos[i], m.wheel, renderers);
                 rig.wheelRadius = m.wheelRadius;
             }
+            if (m.crank != null) rig.crank = Part("Crank", rig.torso, m.crankPos, m.crank, renderers);
             rig.renderers = renderers.ToArray();
             return rig;
         }
@@ -133,637 +170,6 @@ namespace PastaSurvivors
                     return 4;
                 default:
                     return 1;
-            }
-        }
-
-        public static RigMeshes Enemy(EnemyKind kind, int variant = 0)
-        {
-            variant = Mathf.Clamp(variant, 0, EnemyVariantCount(kind) - 1);
-            var key = (kind, variant);
-            if (enemyMeshes.TryGetValue(key, out var cached)) return cached;
-            RigMeshes m;
-            switch (kind)
-            {
-                case EnemyKind.Signore:
-                    m = Humanoid(new HumanSpec { shirt = new Color(0.95f, 0.93f, 0.88f), pants = new Color(0.28f, 0.28f, 0.32f), scarf = Tomato, moustache = 1, belly = true }, kind, variant);
-                    break;
-                case EnemyKind.Tifoso:
-                    m = Humanoid(new HumanSpec
-                    {
-                        shirt = Azzurro, pants = Color.white, shorts = true, scarf = new Color(0.95f, 0.95f, 1f), stripes = Azzurro,
-                        hair = new Color(0.36f, 0.22f, 0.12f), facePaint = true, shoes = new Color(0.1f, 0.1f, 0.12f)
-                    }, kind, variant);
-                    break;
-                case EnemyKind.Mamma:
-                    m = Humanoid(new HumanSpec
-                    {
-                        shirt = new Color(0.78f, 0.18f, 0.22f), skirt = new Color(0.72f, 0.16f, 0.2f), apron = new Color(0.97f, 0.96f, 0.92f),
-                        hair = new Color(0.3f, 0.17f, 0.1f), hairStyle = 1, belly = true, heldR = Held.Slipper, necklace = true
-                    }, kind, variant);
-                    break;
-                case EnemyKind.Chef:
-                    m = Humanoid(new HumanSpec
-                    {
-                        shirt = new Color(0.97f, 0.97f, 0.95f), pants = new Color(0.3f, 0.3f, 0.33f), scarf = Tomato, hat = Hat.Toque,
-                        moustache = 2, belly = true, buttons = true, heldR = Held.Ladle
-                    }, kind, variant);
-                    break;
-                case EnemyKind.Vespista:
-                    m = Vespista(variant);
-                    break;
-                case EnemyKind.Gondoliere:
-                    m = Humanoid(new HumanSpec
-                    {
-                        shirt = Color.white, stripes = new Color(0.1f, 0.12f, 0.3f), pants = new Color(0.08f, 0.08f, 0.1f), scarf = Tomato,
-                        hat = Hat.Boater, hatColor = new Color(0.93f, 0.82f, 0.5f), hatBand = Tomato, moustache = 1, heldR = Held.Oar
-                    }, kind, variant);
-                    break;
-                case EnemyKind.Pizzaiolo:
-                    m = Humanoid(new HumanSpec
-                    {
-                        shirt = new Color(0.98f, 0.98f, 0.98f), pants = new Color(0.2f, 0.22f, 0.3f), apron = new Color(0.99f, 0.99f, 0.97f),
-                        scarf = Tomato, hat = Hat.PaperHat, moustache = 1, heldR = Held.Pizza, skin = Tan
-                    }, kind, variant);
-                    break;
-                case EnemyKind.Mafioso:
-                    m = Humanoid(new HumanSpec
-                    {
-                        shirt = new Color(0.95f, 0.95f, 0.95f), jacket = new Color(0.1f, 0.1f, 0.12f), pants = new Color(0.1f, 0.1f, 0.12f),
-                        tie = new Color(0.75f, 0.08f, 0.1f), hat = Hat.Fedora, hatColor = new Color(0.12f, 0.12f, 0.14f), hatBand = new Color(0.5f, 0.1f, 0.1f),
-                        glasses = 2, moustache = 1, skin = Tan
-                    }, kind, variant);
-                    break;
-                case EnemyKind.Nonna:
-                    m = Humanoid(new HumanSpec
-                    {
-                        shirt = new Color(0.12f, 0.1f, 0.12f), skirt = new Color(0.1f, 0.09f, 0.11f), scarf = new Color(0.3f, 0.28f, 0.32f),
-                        hair = new Color(0.82f, 0.82f, 0.84f), hairStyle = 1, glasses = 1, hunch = 14f, heldR = Held.Spoon, angry = true
-                    }, kind, variant);
-                    break;
-                case EnemyKind.BossNonna:
-                    m = Humanoid(new HumanSpec
-                    {
-                        shirt = new Color(0.14f, 0.1f, 0.16f), skirt = new Color(0.12f, 0.08f, 0.14f), apron = new Color(0.95f, 0.93f, 0.85f),
-                        scarf = new Color(0.55f, 0.1f, 0.18f), hair = new Color(0.9f, 0.9f, 0.92f), hairStyle = 1, glasses = 1,
-                        hunch = 10f, heldR = Held.RollingPin, necklace = true
-                    }, kind);
-                    break;
-                case EnemyKind.BossCapitano:
-                    m = Humanoid(new HumanSpec
-                    {
-                        shirt = Color.white, stripes = new Color(0.55f, 0.08f, 0.12f), pants = new Color(0.08f, 0.08f, 0.1f), scarf = Azzurro,
-                        hat = Hat.CaptainHat, hatColor = new Color(0.1f, 0.12f, 0.25f), moustache = 2, heldR = Held.GoldOar, belly = true
-                    }, kind);
-                    break;
-                case EnemyKind.BossBikeNonna:
-                    m = BikeNonna();
-                    break;
-                case EnemyKind.BossDon:
-                    m = Humanoid(new HumanSpec
-                    {
-                        shirt = new Color(0.12f, 0.1f, 0.1f), jacket = new Color(0.95f, 0.94f, 0.9f), pants = new Color(0.95f, 0.94f, 0.9f),
-                        tie = new Color(0.85f, 0.7f, 0.2f), hat = Hat.Fedora, hatColor = new Color(0.95f, 0.94f, 0.9f), hatBand = new Color(0.1f, 0.1f, 0.1f),
-                        glasses = 2, moustache = 2, belly = true, cigar = true, necklace = true, heldR = Held.Pan, skin = Tan
-                    }, kind);
-                    break;
-                default:
-                    m = Barrel();
-                    break;
-            }
-            enemyMeshes[key] = m;
-            return m;
-        }
-
-        private static Color VariantColor(int variant, Color first, Color second, Color third)
-            => variant == 1 ? first : variant == 2 ? second : third;
-
-        /// <summary>Curated outfits keep each role recognisable. Variant zero is the original model.</summary>
-        private static void VaryAppearance(HumanSpec s, EnemyKind kind, int variant)
-        {
-            if (variant == 0) return;
-            s.skin = VariantColor(variant, Tan, new Color(0.76f, 0.53f, 0.36f), Skin);
-            s.hair = VariantColor(variant, new Color(0.36f, 0.22f, 0.12f), new Color(0.11f, 0.09f, 0.08f), new Color(0.55f, 0.53f, 0.5f));
-            s.eyeSpacing = variant == 1 ? 0.105f : variant == 2 ? 0.09f : 0.115f;
-            s.noseSize = variant == 1 ? 0.85f : variant == 2 ? 1.25f : 1.1f;
-            switch (kind)
-            {
-                case EnemyKind.Signore:
-                    s.shirt = VariantColor(variant, new Color(0.4f, 0.58f, 0.38f), new Color(0.88f, 0.63f, 0.22f), new Color(0.58f, 0.18f, 0.24f));
-                    s.pants = VariantColor(variant, new Color(0.18f, 0.25f, 0.38f), new Color(0.34f, 0.24f, 0.18f), new Color(0.2f, 0.2f, 0.24f));
-                    s.scarf = VariantColor(variant, Azzurro, Basil, new Color(0.93f, 0.82f, 0.55f));
-                    s.moustache = variant == 1 ? 0 : variant == 2 ? 2 : 1;
-                    s.belly = variant == 2;
-                    s.glasses = variant == 1 ? 1 : 0;
-                    s.hairStyle = variant == 2 ? 3 : 0;
-                    if (variant == 3) { s.hat = Hat.Cap; s.hatColor = new Color(0.85f, 0.78f, 0.62f); }
-                    break;
-                case EnemyKind.Tifoso:
-                    s.shirt = VariantColor(variant, new Color(0.08f, 0.22f, 0.58f), new Color(0.25f, 0.55f, 0.92f), new Color(0.1f, 0.32f, 0.72f));
-                    s.stripes = VariantColor(variant, new Color(0.18f, 0.45f, 0.85f), new Color(0.08f, 0.26f, 0.6f), Color.white);
-                    s.scarf = VariantColor(variant, Basil, Color.white, Tomato);
-                    s.pants = variant == 2 ? new Color(0.12f, 0.2f, 0.4f) : Color.white;
-                    s.facePaint = variant != 2;
-                    s.moustache = variant == 1 ? 0 : variant == 2 ? 1 : 2;
-                    s.hairStyle = variant == 2 ? 3 : 0;
-                    s.belly = variant == 2;
-                    s.hat = variant == 1 ? Hat.Cap : variant == 3 ? Hat.Headband : Hat.None;
-                    s.hatColor = Azzurro;
-                    break;
-                case EnemyKind.Mamma:
-                    s.shirt = VariantColor(variant, new Color(0.2f, 0.52f, 0.34f), new Color(0.2f, 0.36f, 0.7f), new Color(0.63f, 0.26f, 0.5f));
-                    s.skirt = s.shirt;
-                    s.apron = VariantColor(variant, new Color(0.98f, 0.9f, 0.65f), new Color(0.96f, 0.86f, 0.8f), new Color(0.92f, 0.95f, 0.9f));
-                    s.hairStyle = variant == 1 ? 4 : variant == 2 ? 2 : 1;
-                    s.belly = variant == 2;
-                    s.glasses = variant == 3 ? 1 : 0;
-                    s.necklace = variant != 2;
-                    break;
-                case EnemyKind.Chef:
-                    s.scarf = VariantColor(variant, Basil, Azzurro, new Color(0.95f, 0.72f, 0.2f));
-                    s.pants = VariantColor(variant, new Color(0.1f, 0.16f, 0.27f), new Color(0.24f, 0.18f, 0.16f), new Color(0.16f, 0.17f, 0.19f));
-                    if (variant != 3) s.apron = variant == 1 ? new Color(0.16f, 0.18f, 0.22f) : new Color(0.88f, 0.82f, 0.68f);
-                    s.moustache = variant == 1 ? 0 : variant == 2 ? 1 : 2;
-                    s.belly = variant == 2;
-                    s.glasses = variant == 3 ? 1 : 0;
-                    break;
-                case EnemyKind.Gondoliere:
-                    s.stripes = VariantColor(variant, Tomato, new Color(0.08f, 0.24f, 0.22f), new Color(0.06f, 0.07f, 0.1f));
-                    s.scarf = VariantColor(variant, Azzurro, Tomato, new Color(0.9f, 0.65f, 0.2f));
-                    s.hatBand = s.scarf;
-                    s.hatColor = VariantColor(variant, new Color(0.98f, 0.93f, 0.74f), new Color(0.76f, 0.6f, 0.32f), new Color(0.94f, 0.9f, 0.82f));
-                    s.moustache = variant == 1 ? 0 : variant == 2 ? 2 : 1;
-                    s.glasses = variant == 2 ? 2 : 0;
-                    break;
-                case EnemyKind.Pizzaiolo:
-                    s.apron = VariantColor(variant, Basil, Tomato, new Color(0.95f, 0.82f, 0.5f));
-                    s.scarf = VariantColor(variant, Tomato, new Color(0.95f, 0.93f, 0.85f), Basil);
-                    s.moustache = variant == 1 ? 0 : variant == 2 ? 2 : 1;
-                    s.belly = variant == 2;
-                    s.glasses = variant == 3 ? 1 : 0;
-                    break;
-                case EnemyKind.Mafioso:
-                    var suit = VariantColor(variant, new Color(0.12f, 0.18f, 0.32f), new Color(0.24f, 0.24f, 0.28f), new Color(0.32f, 0.22f, 0.18f));
-                    s.jacket = suit; s.pants = suit; s.hatColor = suit;
-                    s.tie = VariantColor(variant, new Color(0.92f, 0.7f, 0.24f), Azzurro, Basil);
-                    s.hatBand = s.tie;
-                    s.moustache = variant == 1 ? 0 : variant == 2 ? 2 : 1;
-                    s.glasses = variant == 1 ? 1 : variant == 2 ? 0 : 2;
-                    s.belly = variant == 2;
-                    break;
-                case EnemyKind.Nonna:
-                    s.shirt = VariantColor(variant, new Color(0.28f, 0.12f, 0.3f), new Color(0.1f, 0.24f, 0.17f), new Color(0.1f, 0.15f, 0.3f));
-                    s.skirt = s.shirt;
-                    s.scarf = VariantColor(variant, new Color(0.65f, 0.5f, 0.68f), new Color(0.62f, 0.72f, 0.5f), new Color(0.68f, 0.7f, 0.8f));
-                    s.hair = VariantColor(variant, new Color(0.94f, 0.92f, 0.87f), new Color(0.48f, 0.48f, 0.5f), new Color(0.72f, 0.7f, 0.68f));
-                    s.hairStyle = variant == 1 ? 1 : variant == 2 ? 2 : 0;
-                    s.necklace = variant != 2;
-                    s.belly = variant == 2;
-                    if (variant == 2) s.apron = new Color(0.87f, 0.84f, 0.74f);
-                    break;
-                case EnemyKind.Vespista:
-                    s.shirt = VariantColor(variant, new Color(0.14f, 0.3f, 0.54f), new Color(0.9f, 0.62f, 0.16f), new Color(0.17f, 0.4f, 0.28f));
-                    s.pants = VariantColor(variant, new Color(0.3f, 0.3f, 0.34f), new Color(0.1f, 0.16f, 0.3f), new Color(0.34f, 0.24f, 0.16f));
-                    s.hatColor = VariantColor(variant, new Color(0.93f, 0.9f, 0.8f), Azzurro, new Color(0.95f, 0.74f, 0.2f));
-                    s.glasses = variant == 1 ? 0 : variant == 2 ? 1 : 2;
-                    s.moustache = variant == 3 ? 1 : 0;
-                    break;
-            }
-        }
-
-        public static RigMeshes Player(CharacterDef c, int index)
-        {
-            var spec = new HumanSpec
-            {
-                skin = c.skin, shirt = c.shirt, pants = c.pants, hair = c.hair, angry = false, shoes = new Color(0.95f, 0.95f, 0.95f)
-            };
-            switch (index)
-            {
-                case 0: spec.hat = Hat.Cap; spec.hatColor = new Color(0.15f, 0.3f, 0.7f); spec.shorts = true; spec.backpack = true; break;
-                case 1: spec.hairStyle = 4; spec.skirt = c.pants; spec.scarf = new Color(0.98f, 0.98f, 0.95f); break;
-                default: spec.hat = Hat.Headband; spec.glasses = 1; spec.apron = new Color(0.95f, 0.95f, 0.9f); spec.heldL = Held.SelfieStick; break;
-            }
-            var m = Humanoid(spec, null);
-            m.armRest = -62f;
-            return m;
-        }
-
-        private static RigMeshes Humanoid(HumanSpec s, EnemyKind? kind, int variant = 0)
-        {
-            if (kind.HasValue) VaryAppearance(s, kind.Value, variant);
-            var m = new RigMeshes { freeHandL = s.heldL == Held.None, freeHandR = s.heldR == Held.None };
-            // ---- legs (origin at hip)
-            kit.Clear();
-            float legLen = m.hipY;
-            if (s.skirt.HasValue || s.shorts)
-            {
-                kit.Bar(new Vector3(0, -0.02f, 0), new Vector3(0, -legLen + 0.1f, 0), 0.13f, s.skin);
-                if (s.shorts) kit.Cyl(new Vector3(0, -0.14f, 0), new Vector3(0.2f, 0.3f, 0.2f), s.pants);
-            }
-            else kit.Bar(new Vector3(0, 0.02f, 0), new Vector3(0, -legLen + 0.1f, 0), 0.18f, s.pants);
-            kit.Box(new Vector3(0, -legLen + 0.05f, 0.05f), new Vector3(0.16f, 0.1f, 0.3f), s.shoes);
-            m.leg = kit.ToMesh("Leg");
-
-            // ---- body
-            kit.Clear();
-            float lean = s.hunch;
-            kit.Frame = Matrix4x4.TRS(new Vector3(0, 0.75f, 0), Quaternion.Euler(lean, 0, 0), Vector3.one) * Matrix4x4.Translate(new Vector3(0, -0.75f, 0));
-            var torsoColor = s.jacket ?? s.shirt;
-            kit.Ball(new Vector3(0, 1.05f, 0), new Vector3(0.6f, 0.72f, 0.44f), torsoColor);
-            kit.Cyl(new Vector3(0, 0.82f, 0), new Vector3(0.5f, 0.2f, 0.38f), s.skirt.HasValue ? s.skirt.Value : s.pants);
-            if (s.belly) kit.Ball(new Vector3(0, 0.98f, 0.1f), new Vector3(0.5f, 0.5f, 0.4f), s.apron ?? torsoColor);
-            if (s.stripes.HasValue && !s.jacket.HasValue)
-                for (int i = 0; i < 4; i++)
-                    kit.Cyl(new Vector3(0, 0.86f + i * 0.13f, 0), new Vector3(0.6f - Mathf.Abs(i - 1.5f) * 0.04f, 0.05f, 0.45f), s.stripes.Value);
-            if (s.jacket.HasValue)
-            {
-                kit.Box(new Vector3(0, 1.18f, 0.2f), new Vector3(0.16f, 0.32f, 0.06f), s.shirt, new Vector3(-8, 0, 0));
-                if (s.tie.HasValue) kit.Box(new Vector3(0, 1.12f, 0.235f), new Vector3(0.06f, 0.28f, 0.03f), s.tie.Value, new Vector3(-8, 0, 0));
-            }
-            if (s.buttons)
-                for (int i = 0; i < 3; i++)
-                {
-                    kit.Ball(new Vector3(-0.08f, 0.98f + i * 0.13f, 0.24f), 0.05f, new Color(0.7f, 0.7f, 0.72f));
-                    kit.Ball(new Vector3(0.08f, 0.98f + i * 0.13f, 0.24f), 0.05f, new Color(0.7f, 0.7f, 0.72f));
-                }
-            if (s.skirt.HasValue)
-                kit.Cone(new Vector3(0, 0.52f, 0), new Vector3(0.78f, 0.62f, 0.62f), s.skirt.Value, default, 0.62f, 12);
-            if (s.apron.HasValue)
-            {
-                kit.Box(new Vector3(0, 0.78f, 0.27f), new Vector3(0.44f, 0.58f, 0.04f), s.apron.Value, new Vector3(-6, 0, 0));
-                kit.Box(new Vector3(0, 1.17f, 0.22f), new Vector3(0.3f, 0.26f, 0.04f), s.apron.Value, new Vector3(-12, 0, 0));
-            }
-            if (s.backpack)
-            {
-                kit.Box(new Vector3(0, 1.08f, -0.3f), new Vector3(0.42f, 0.5f, 0.24f), new Color(0.95f, 0.55f, 0.15f));
-                kit.Box(new Vector3(0, 1.36f, -0.3f), new Vector3(0.3f, 0.12f, 0.2f), new Color(0.2f, 0.2f, 0.25f));
-            }
-            if (s.scarf.HasValue)
-            {
-                kit.Cyl(new Vector3(0, 1.38f, 0), new Vector3(0.38f, 0.1f, 0.34f), s.scarf.Value);
-                if (s.stripes.HasValue && !s.jacket.HasValue && kind == EnemyKind.Tifoso)
-                    kit.Box(new Vector3(0.1f, 1.2f, 0.2f), new Vector3(0.1f, 0.34f, 0.04f), s.stripes.Value, new Vector3(0, 0, 8));
-                else kit.Box(new Vector3(0.08f, 1.26f, 0.19f), new Vector3(0.1f, 0.2f, 0.04f), s.scarf.Value, new Vector3(-10, 0, 10));
-            }
-            if (s.necklace)
-                for (int i = 0; i < 7; i++)
-                {
-                    float a = Mathf.Lerp(-70, 70, i / 6f) * Mathf.Deg2Rad;
-                    kit.Ball(new Vector3(Mathf.Sin(a) * 0.17f, 1.33f - Mathf.Cos(a) * 0.05f, 0.14f + Mathf.Cos(a) * 0.07f), 0.05f,
-                        kind == EnemyKind.BossDon ? new Color(1f, 0.82f, 0.25f) : new Color(0.97f, 0.95f, 0.9f));
-                }
-            Head(s, 1.66f);
-            if (kind == EnemyKind.BossDon) kit.Box(new Vector3(0.24f, 1.03f, 0.23f), new Vector3(0.12f, 0.05f, 0.03f), new Color(0.95f, 0.1f, 0.1f));
-            m.body = kit.ToMesh("Body");
-
-            // ---- arms (origin at shoulder, hanging down)
-            m.armL = Arm(s, s.heldL, true);
-            m.armR = Arm(s, s.heldR, false);
-            m.shoulderY = 1.3f;
-            return m;
-        }
-
-        private static Mesh Arm(HumanSpec s, Held held, bool left)
-        {
-            kit.Clear();
-            var sleeve = s.jacket ?? s.shirt;
-            kit.Bar(new Vector3(0, 0.02f, 0), new Vector3(0, -0.5f, 0), 0.15f, sleeve);
-            if (held == Held.None && s.angry)
-            {
-                // A joined fingertip cluster and thumb, palm up when the arm is raised to chest height.
-                kit.Ball(new Vector3(0, -0.57f, 0.02f), new Vector3(0.17f, 0.13f, 0.09f), s.skin);
-                kit.Cone(new Vector3(0, -0.63f, 0.08f), new Vector3(0.125f, 0.12f, 0.1f), s.skin, new Vector3(90, 0, 0), 0f, 6);
-                kit.Bar(new Vector3(left ? 0.075f : -0.075f, -0.545f, 0.045f), new Vector3(0, -0.63f, 0.135f), 0.045f, s.skin);
-            }
-            else
-            {
-                kit.Ball(new Vector3(0, -0.57f, 0.02f), 0.14f, s.skin);
-                kit.Cone(new Vector3(0, -0.66f, 0.03f), new Vector3(0.09f, 0.1f, 0.09f), s.skin, new Vector3(180, 0, 0), 0f, 6);
-            }
-            var hand = new Vector3(0, -0.58f, 0.04f);
-            switch (held)
-            {
-                case Held.Slipper:
-                    kit.Box(hand + new Vector3(0, -0.02f, 0.14f), new Vector3(0.13f, 0.035f, 0.32f), new Color(0.95f, 0.45f, 0.62f), new Vector3(-15, 0, 0));
-                    kit.Box(hand + new Vector3(0, 0.02f, 0.2f), new Vector3(0.14f, 0.05f, 0.08f), new Color(0.3f, 0.55f, 0.9f), new Vector3(-15, 0, 0));
-                    break;
-                case Held.Ladle:
-                    kit.Bar(hand + new Vector3(0, 0.05f, 0), hand + new Vector3(0, -0.02f, 0.45f), 0.035f, new Color(0.75f, 0.75f, 0.78f));
-                    kit.Ball(hand + new Vector3(0, -0.03f, 0.5f), new Vector3(0.16f, 0.09f, 0.16f), new Color(0.75f, 0.75f, 0.78f));
-                    break;
-                case Held.Spoon:
-                    kit.Bar(hand + new Vector3(0, 0.05f, 0), hand + new Vector3(0, -0.02f, 0.4f), 0.04f, new Color(0.6f, 0.4f, 0.2f));
-                    kit.Ball(hand + new Vector3(0, -0.03f, 0.45f), new Vector3(0.12f, 0.05f, 0.16f), new Color(0.6f, 0.4f, 0.2f));
-                    break;
-                case Held.RollingPin:
-                    kit.Cyl(hand + new Vector3(0, 0, 0.05f), new Vector3(0.12f, 0.6f, 0.12f), new Color(0.82f, 0.6f, 0.36f), new Vector3(90, 0, 0));
-                    kit.Cyl(hand + new Vector3(0, 0, 0.42f), new Vector3(0.05f, 0.14f, 0.05f), new Color(0.6f, 0.4f, 0.22f), new Vector3(90, 0, 0));
-                    break;
-                case Held.Oar:
-                case Held.GoldOar:
-                    {
-                        var c = held == Held.GoldOar ? new Color(1f, 0.8f, 0.3f) : new Color(0.55f, 0.36f, 0.18f);
-                        kit.Bar(hand + new Vector3(0, 0.9f, -0.15f), hand + new Vector3(0, -0.9f, 0.35f), 0.06f, c);
-                        kit.Box(hand + new Vector3(0, -1.05f, 0.4f), new Vector3(0.05f, 0.45f, 0.18f), c, new Vector3(-15, 0, 0));
-                        break;
-                    }
-                case Held.Pizza:
-                    kit.Cyl(hand + new Vector3(0, -0.02f, 0.2f), new Vector3(0.6f, 0.05f, 0.6f), new Color(0.92f, 0.72f, 0.4f), new Vector3(-70, 0, 0), 14);
-                    kit.Cyl(hand + new Vector3(0, 0.01f, 0.2f), new Vector3(0.5f, 0.05f, 0.5f), Tomato, new Vector3(-70, 0, 0), 14);
-                    break;
-                case Held.Pan:
-                    kit.Bar(hand, hand + new Vector3(0, 0, 0.3f), 0.05f, new Color(0.15f, 0.15f, 0.15f));
-                    kit.Cyl(hand + new Vector3(0, 0, 0.55f), new Vector3(0.5f, 0.08f, 0.5f), new Color(0.2f, 0.2f, 0.22f), new Vector3(0, 0, 0), 14);
-                    kit.Cyl(hand + new Vector3(0, 0.03f, 0.55f), new Vector3(0.42f, 0.06f, 0.42f), new Color(1f, 0.9f, 0.55f), default, 14);
-                    break;
-                case Held.SelfieStick:
-                    kit.Bar(hand, hand + new Vector3(0, -0.1f, 0.7f), 0.03f, new Color(0.2f, 0.2f, 0.22f));
-                    kit.Box(hand + new Vector3(0, -0.1f, 0.75f), new Vector3(0.1f, 0.18f, 0.02f), new Color(0.1f, 0.1f, 0.12f));
-                    break;
-            }
-            return kit.ToMesh(left ? "ArmL" : "ArmR");
-        }
-
-        private static void Head(HumanSpec s, float y)
-        {
-            var hair = s.hair;
-            kit.Ball(new Vector3(0, y, 0), new Vector3(0.5f, 0.5f, 0.48f), s.skin, default, true);
-            // Ears
-            kit.Ball(new Vector3(-0.25f, y - 0.02f, 0), new Vector3(0.08f, 0.12f, 0.08f), s.skin);
-            kit.Ball(new Vector3(0.25f, y - 0.02f, 0), new Vector3(0.08f, 0.12f, 0.08f), s.skin);
-            // Big comic eyes
-            float ey = y + 0.04f;
-            for (int side = -1; side <= 1; side += 2)
-            {
-                kit.Ball(new Vector3(side * s.eyeSpacing, ey, 0.2f), new Vector3(0.14f, 0.15f, 0.1f), Color.white);
-                kit.Ball(new Vector3(side * s.eyeSpacing * 0.95f, ey - 0.01f, 0.25f), 0.07f, new Color(0.08f, 0.06f, 0.06f));
-                float browTilt = s.angry ? side * -20f : side * 8f;
-                kit.Box(new Vector3(side * s.eyeSpacing, ey + 0.11f, 0.22f), new Vector3(0.14f, 0.035f, 0.04f), hair.grayscale > 0.7f ? new Color(0.6f, 0.6f, 0.62f) : hair, new Vector3(0, 0, browTilt));
-            }
-            kit.Ball(new Vector3(0, y - 0.04f, 0.25f), new Vector3(0.1f, 0.12f, 0.12f) * s.noseSize, s.skin * 0.95f + new Color(0.05f, 0, 0));
-            // Mouth: open shouting oval.
-            kit.Ball(new Vector3(0, y - 0.15f, 0.21f), new Vector3(0.12f, s.angry ? 0.07f : 0.03f, 0.04f), new Color(0.45f, 0.08f, 0.1f));
-            if (s.moustache > 0)
-            {
-                var mc = hair.grayscale > 0.7f ? new Color(0.7f, 0.7f, 0.72f) : hair;
-                float w = s.moustache == 2 ? 0.2f : 0.14f;
-                kit.Box(new Vector3(-0.07f, y - 0.1f, 0.24f), new Vector3(w, 0.05f, 0.05f), mc, new Vector3(0, 0, 14));
-                kit.Box(new Vector3(0.07f, y - 0.1f, 0.24f), new Vector3(w, 0.05f, 0.05f), mc, new Vector3(0, 0, -14));
-                if (s.moustache == 2)
-                {
-                    kit.Ball(new Vector3(-0.17f, y - 0.06f, 0.22f), 0.06f, mc);
-                    kit.Ball(new Vector3(0.17f, y - 0.06f, 0.22f), 0.06f, mc);
-                }
-            }
-            if (s.facePaint)
-            {
-                kit.Box(new Vector3(-0.17f, y - 0.05f, 0.17f), new Vector3(0.025f, 0.08f, 0.02f), new Color(0.1f, 0.6f, 0.25f), new Vector3(0, -35, 0));
-                kit.Box(new Vector3(-0.155f, y - 0.05f, 0.185f), new Vector3(0.025f, 0.08f, 0.02f), Color.white, new Vector3(0, -35, 0));
-                kit.Box(new Vector3(-0.14f, y - 0.05f, 0.2f), new Vector3(0.025f, 0.08f, 0.02f), Tomato, new Vector3(0, -35, 0));
-            }
-            if (s.cigar)
-            {
-                kit.Bar(new Vector3(0.05f, y - 0.14f, 0.23f), new Vector3(0.2f, y - 0.17f, 0.36f), 0.04f, new Color(0.4f, 0.24f, 0.12f));
-                kit.Ball(new Vector3(0.2f, y - 0.17f, 0.36f), 0.045f, new Color(1f, 0.4f, 0.1f));
-            }
-            if (s.glasses == 1)
-            {
-                var g = new Color(0.25f, 0.2f, 0.18f);
-                kit.Cyl(new Vector3(-s.eyeSpacing, ey, 0.27f), new Vector3(0.15f, 0.015f, 0.15f), g, new Vector3(90, 0, 0), 10);
-                kit.Cyl(new Vector3(s.eyeSpacing, ey, 0.27f), new Vector3(0.15f, 0.015f, 0.15f), g, new Vector3(90, 0, 0), 10);
-            }
-            else if (s.glasses == 2)
-            {
-                kit.Box(new Vector3(0, ey, 0.27f), new Vector3(0.38f, 0.09f, 0.03f), new Color(0.05f, 0.05f, 0.06f));
-            }
-            // Hair
-            switch (s.hairStyle)
-            {
-                case 1:
-                    kit.Ball(new Vector3(0, y + 0.1f, -0.03f), new Vector3(0.54f, 0.38f, 0.52f), hair);
-                    kit.Ball(new Vector3(0, y + 0.22f, -0.2f), 0.24f, hair);
-                    break;
-                case 2:
-                case 4:
-                    kit.Ball(new Vector3(0, y + 0.09f, -0.03f), new Vector3(0.55f, 0.4f, 0.54f), hair);
-                    if (s.hairStyle == 2) kit.Box(new Vector3(0, y - 0.15f, -0.16f), new Vector3(0.5f, 0.5f, 0.2f), hair);
-                    else kit.Bar(new Vector3(0, y + 0.1f, -0.25f), new Vector3(0, y - 0.3f, -0.34f), 0.14f, hair);
-                    break;
-                case 3:
-                    kit.Ball(new Vector3(0, y - 0.02f, -0.06f), new Vector3(0.52f, 0.2f, 0.48f), hair);
-                    break;
-                default:
-                    kit.Ball(new Vector3(0, y + 0.1f, -0.04f), new Vector3(0.53f, 0.36f, 0.52f), hair);
-                    break;
-            }
-            float top = y + 0.24f;
-            var band = s.hatBand ?? new Color(0.2f, 0.2f, 0.2f);
-            switch (s.hat)
-            {
-                case Hat.Toque:
-                    kit.Cyl(new Vector3(0, top + 0.12f, 0), new Vector3(0.4f, 0.3f, 0.4f), s.hatColor);
-                    kit.Ball(new Vector3(0, top + 0.33f, 0), new Vector3(0.55f, 0.32f, 0.55f), s.hatColor);
-                    break;
-                case Hat.Boater:
-                    kit.Cyl(new Vector3(0, top - 0.02f, 0), new Vector3(0.78f, 0.035f, 0.78f), s.hatColor, default, 14);
-                    kit.Cyl(new Vector3(0, top + 0.07f, 0), new Vector3(0.46f, 0.16f, 0.46f), s.hatColor, default, 14);
-                    kit.Cyl(new Vector3(0, top + 0.03f, 0), new Vector3(0.47f, 0.06f, 0.47f), band, default, 14);
-                    break;
-                case Hat.Fedora:
-                    kit.Cyl(new Vector3(0, top - 0.03f, 0), new Vector3(0.7f, 0.035f, 0.66f), s.hatColor, default, 14);
-                    kit.Cone(new Vector3(0, top + 0.1f, 0), new Vector3(0.46f, 0.24f, 0.44f), s.hatColor, default, 0.8f, 12);
-                    kit.Cyl(new Vector3(0, top + 0.02f, 0), new Vector3(0.47f, 0.06f, 0.45f), band, default, 12);
-                    break;
-                case Hat.Cap:
-                    kit.Ball(new Vector3(0, top - 0.04f, -0.02f), new Vector3(0.54f, 0.3f, 0.54f), s.hatColor);
-                    kit.Box(new Vector3(0, top - 0.1f, -0.33f), new Vector3(0.32f, 0.03f, 0.22f), s.hatColor);
-                    break;
-                case Hat.PaperHat:
-                    kit.Cyl(new Vector3(0, top + 0.02f, 0), new Vector3(0.48f, 0.16f, 0.48f), Color.white);
-                    break;
-                case Hat.CaptainHat:
-                    kit.Cyl(new Vector3(0, top + 0.05f, 0.02f), new Vector3(0.56f, 0.18f, 0.56f), Color.white, default, 14);
-                    kit.Cyl(new Vector3(0, top - 0.02f, 0.02f), new Vector3(0.5f, 0.08f, 0.5f), s.hatColor, default, 14);
-                    kit.Box(new Vector3(0, top - 0.05f, 0.27f), new Vector3(0.36f, 0.03f, 0.16f), new Color(0.05f, 0.05f, 0.08f), new Vector3(15, 0, 0));
-                    kit.Ball(new Vector3(0, top + 0.04f, 0.28f), new Vector3(0.1f, 0.1f, 0.04f), new Color(1f, 0.82f, 0.3f));
-                    break;
-                case Hat.Headband:
-                    kit.Cyl(new Vector3(0, y + 0.13f, 0), new Vector3(0.53f, 0.07f, 0.51f), Color.white, default, 14);
-                    kit.Ball(new Vector3(0, y + 0.13f, 0.25f), new Vector3(0.08f, 0.08f, 0.03f), Tomato);
-                    break;
-            }
-        }
-
-        private static RigMeshes Vespista(int variant)
-        {
-            var s = new HumanSpec
-            {
-                shirt = new Color(0.45f, 0.28f, 0.16f), pants = new Color(0.2f, 0.25f, 0.4f), glasses = 2, hair = new Color(0.15f, 0.1f, 0.08f),
-                hat = Hat.Helmet, hatColor = new Color(0.92f, 0.22f, 0.2f), skin = Tan
-            };
-            VaryAppearance(s, EnemyKind.Vespista, variant);
-            var m = new RigMeshes { seated = true, armRest = -58f, leg = null };
-            kit.Clear();
-            var paint = variant == 0 ? new Color(0.55f, 0.85f, 0.75f)
-                : VariantColor(variant, Tomato, Azzurro, new Color(0.95f, 0.89f, 0.72f));
-            // Scooter
-            kit.Box(new Vector3(0, 0.45f, -0.25f), new Vector3(0.5f, 0.45f, 0.8f), paint);
-            kit.Ball(new Vector3(0, 0.5f, -0.45f), new Vector3(0.6f, 0.5f, 0.7f), paint);
-            kit.Box(new Vector3(0, 0.3f, 0.3f), new Vector3(0.36f, 0.12f, 0.6f), paint);
-            kit.Box(new Vector3(0, 0.75f, 0.6f), new Vector3(0.42f, 0.8f, 0.1f), paint, new Vector3(-12, 0, 0));
-            kit.Bar(new Vector3(-0.35f, 1.15f, 0.62f), new Vector3(0.35f, 1.15f, 0.62f), 0.05f, new Color(0.3f, 0.3f, 0.32f));
-            kit.Ball(new Vector3(0, 1.1f, 0.68f), new Vector3(0.18f, 0.18f, 0.08f), new Color(1f, 0.95f, 0.7f));
-            kit.Box(new Vector3(0, 0.72f, -0.3f), new Vector3(0.38f, 0.08f, 0.6f), new Color(0.35f, 0.2f, 0.12f));
-            kit.Cyl(new Vector3(0, 0.2f, 0.62f), new Vector3(0.36f, 0.12f, 0.36f), new Color(0.12f, 0.12f, 0.12f), new Vector3(0, 0, 90));
-            kit.Cyl(new Vector3(0, 0.2f, -0.6f), new Vector3(0.36f, 0.12f, 0.36f), new Color(0.12f, 0.12f, 0.12f), new Vector3(0, 0, 90));
-            // Rider sits higher; reuse humanoid torso + head via frame offset.
-            kit.Frame = Matrix4x4.Translate(new Vector3(0, 0.1f, -0.25f));
-            kit.Ball(new Vector3(0, 1.05f, 0), new Vector3(0.6f, 0.72f, 0.44f), s.shirt);
-            // Thighs forward, shins down
-            kit.Bar(new Vector3(-0.14f, 0.78f, 0f), new Vector3(-0.16f, 0.72f, 0.45f), 0.18f, s.pants);
-            kit.Bar(new Vector3(0.14f, 0.78f, 0f), new Vector3(0.16f, 0.72f, 0.45f), 0.18f, s.pants);
-            kit.Bar(new Vector3(-0.16f, 0.72f, 0.45f), new Vector3(-0.17f, 0.3f, 0.5f), 0.15f, s.pants);
-            kit.Bar(new Vector3(0.16f, 0.72f, 0.45f), new Vector3(0.17f, 0.3f, 0.5f), 0.15f, s.pants);
-            kit.Box(new Vector3(-0.17f, 0.25f, 0.56f), new Vector3(0.14f, 0.09f, 0.26f), s.shoes);
-            kit.Box(new Vector3(0.17f, 0.25f, 0.56f), new Vector3(0.14f, 0.09f, 0.26f), s.shoes);
-            kit.Cyl(new Vector3(0, 1.38f, 0), new Vector3(0.36f, 0.1f, 0.32f), new Color(0.95f, 0.95f, 0.9f));
-            Head(s, 1.66f);
-            kit.Ball(new Vector3(0, 1.78f, -0.02f), new Vector3(0.58f, 0.42f, 0.58f), s.hatColor);
-            kit.Box(new Vector3(0, 1.84f, 0), new Vector3(0.08f, 0.2f, 0.56f), Color.white);
-            m.body = kit.ToMesh("Vespista");
-            m.armL = Arm(s, Held.None, true);
-            m.armR = Arm(s, Held.None, false);
-            m.shoulderY = 1.4f;
-            return m;
-        }
-
-        /// <summary>Grande Nonna with wheels: she would have been a bike. A celeste step-through city bike, basket of spaghetti and all.</summary>
-        private static RigMeshes BikeNonna()
-        {
-            var s = new HumanSpec
-            {
-                shirt = new Color(0.14f, 0.1f, 0.16f), skirt = new Color(0.12f, 0.08f, 0.14f), apron = new Color(0.95f, 0.93f, 0.85f),
-                scarf = new Color(0.55f, 0.1f, 0.18f), hair = new Color(0.9f, 0.9f, 0.92f), hairStyle = 1, glasses = 1, necklace = true
-            };
-            const float wheelR = 0.45f;
-            var rearHub = new Vector3(0f, wheelR, -0.75f);
-            var frontHub = new Vector3(0f, wheelR, 0.5f);
-            var m = new RigMeshes
-            {
-                seated = true, armRest = -58f, leg = null, shoulderY = 1.58f,
-                wheelPos = new[] { rearHub, frontHub }, wheelRadius = wheelR
-            };
-
-            // ---- wheel (origin at the hub, axle along X): tyre, rim, spokes and hub
-            kit.Clear();
-            var tyre = new Color(0.1f, 0.1f, 0.1f);
-            var steel = new Color(0.78f, 0.8f, 0.84f);
-            Ring(Vector3.zero, wheelR - 0.035f, 18, 0.07f, tyre, 0f, 360f);
-            Ring(Vector3.zero, wheelR - 0.08f, 18, 0.025f, steel, 0f, 360f);
-            for (int i = 0; i < 8; i++)
-            {
-                float a = i * Mathf.PI / 4f;
-                kit.Bar(Vector3.zero, new Vector3(0f, Mathf.Sin(a), Mathf.Cos(a)) * (wheelR - 0.08f), 0.022f, steel);
-            }
-            kit.Cyl(Vector3.zero, new Vector3(0.09f, 0.14f, 0.09f), steel, new Vector3(0, 0, 90), 8);
-            m.wheel = kit.ToMesh("BikeWheel");
-
-            // ---- bike frame
-            kit.Clear();
-            var celeste = new Color(0.5f, 0.82f, 0.76f);
-            var bb = new Vector3(0f, 0.42f, -0.15f);
-            var seatTop = new Vector3(0f, 0.98f, -0.2f);
-            var headLow = new Vector3(0f, 0.78f, 0.36f);
-            var headTop = new Vector3(0f, 1.02f, 0.33f);
-            kit.Bar(bb, seatTop, 0.06f, celeste);
-            kit.Bar(headLow, headTop, 0.07f, celeste);
-            // Step-through: two low tubes swoop from the head tube to the bottom bracket.
-            kit.Bar(headTop + new Vector3(0, -0.06f, 0), new Vector3(0f, 0.62f, 0.12f), 0.055f, celeste);
-            kit.Bar(new Vector3(0f, 0.62f, 0.12f), bb, 0.055f, celeste);
-            kit.Bar(headLow, new Vector3(0f, 0.5f, 0.15f), 0.05f, celeste);
-            kit.Bar(new Vector3(0f, 0.5f, 0.15f), bb + new Vector3(0, 0.02f, 0.04f), 0.05f, celeste);
-            for (int side = -1; side <= 1; side += 2)
-            {
-                var hubSide = new Vector3(side * 0.06f, 0f, 0f);
-                kit.Bar(bb + hubSide, rearHub + hubSide, 0.035f, celeste);
-                kit.Bar(seatTop + new Vector3(side * 0.04f, -0.06f, 0f), rearHub + hubSide, 0.035f, celeste);
-                kit.Bar(headLow + hubSide, frontHub + hubSide, 0.04f, celeste);
-            }
-            // Mudguards
-            Ring(rearHub, wheelR + 0.05f, 10, 0.05f, celeste, 30f, 200f);
-            Ring(frontHub, wheelR + 0.05f, 10, 0.05f, celeste, -15f, 150f);
-            // Crank, chainring and pedals
-            kit.Cyl(bb + new Vector3(0.07f, 0f, 0f), new Vector3(0.22f, 0.02f, 0.22f), steel, new Vector3(0, 0, 90), 12);
-            kit.Bar(bb + new Vector3(0.1f, 0f, 0f), bb + new Vector3(0.1f, -0.14f, 0.08f), 0.03f, steel);
-            kit.Box(bb + new Vector3(0.15f, -0.15f, 0.08f), new Vector3(0.1f, 0.025f, 0.06f), tyre);
-            kit.Bar(bb + new Vector3(-0.1f, 0f, 0f), bb + new Vector3(-0.1f, 0.14f, -0.08f), 0.03f, steel);
-            // Saddle, stem, swept-back bars, bell and lamp
-            kit.Box(seatTop + new Vector3(0, 0.04f, -0.02f), new Vector3(0.22f, 0.07f, 0.3f), new Color(0.45f, 0.26f, 0.14f));
-            var stem = new Vector3(0f, 1.15f, 0.31f);
-            kit.Bar(headTop, stem, 0.04f, steel);
-            for (int side = -1; side <= 1; side += 2)
-            {
-                var mid = new Vector3(side * 0.2f, 1.17f, 0.37f);
-                var grip = new Vector3(side * 0.31f, 1.2f, 0.5f);
-                kit.Bar(stem, mid, 0.035f, steel);
-                kit.Bar(mid, grip, 0.035f, steel);
-                kit.Bar(grip, grip + new Vector3(side * 0.08f, 0f, 0.04f), 0.05f, new Color(0.35f, 0.2f, 0.1f));
-            }
-            kit.Cyl(new Vector3(0.14f, 1.22f, 0.38f), new Vector3(0.1f, 0.05f, 0.1f), new Color(1f, 0.82f, 0.3f), default, 10);
-            kit.Ball(new Vector3(0f, 1.0f, 0.44f), new Vector3(0.14f, 0.14f, 0.1f), new Color(1f, 0.95f, 0.7f));
-            // Wicker basket with spaghetti, tomatoes and basil
-            var wicker = new Color(0.72f, 0.52f, 0.28f);
-            var basket = new Vector3(0f, 1.05f, 0.66f);
-            kit.Box(basket, new Vector3(0.46f, 0.3f, 0.34f), wicker);
-            kit.Box(basket + new Vector3(0, 0.15f, 0), new Vector3(0.4f, 0.02f, 0.28f), new Color(0.35f, 0.22f, 0.1f));
-            kit.Box(basket + new Vector3(0, 0.05f, 0), new Vector3(0.47f, 0.035f, 0.35f), wicker * 0.8f);
-            kit.Box(basket + new Vector3(0, -0.06f, 0), new Vector3(0.47f, 0.035f, 0.35f), wicker * 0.8f);
-            for (int i = 0; i < 6; i++)
-                kit.Cyl(basket + new Vector3(-0.1f + i * 0.035f, 0.3f, -0.04f + (i % 2) * 0.05f), new Vector3(0.025f, 0.42f, 0.025f), PastaGold, new Vector3(-8f + i * 3f, 0f, 12f - i * 5f), 5);
-            kit.Ball(basket + new Vector3(0.12f, 0.17f, 0.07f), 0.14f, Tomato);
-            kit.Ball(basket + new Vector3(0.03f, 0.18f, 0.1f), 0.12f, Tomato);
-            kit.Ball(basket + new Vector3(-0.12f, 0.17f, 0.08f), new Vector3(0.12f, 0.04f, 0.08f), Basil, new Vector3(0, 30, 20));
-            // Rear rack with a little tricolore pennant
-            kit.Box(new Vector3(0f, 1.0f, -0.72f), new Vector3(0.22f, 0.03f, 0.4f), new Color(0.3f, 0.3f, 0.32f));
-            kit.Bar(new Vector3(0f, 1.0f, -0.88f), new Vector3(0f, 1.75f, -0.95f), 0.02f, steel);
-            kit.Box(new Vector3(0f, 1.66f, -1.0f), new Vector3(0.02f, 0.14f, 0.06f), Basil);
-            kit.Box(new Vector3(0f, 1.66f, -1.06f), new Vector3(0.02f, 0.14f, 0.06f), Color.white);
-            kit.Box(new Vector3(0f, 1.66f, -1.12f), new Vector3(0.02f, 0.14f, 0.06f), Tomato);
-
-            // ---- Nonna, perched on the saddle; her skirt flows down into the frame where her legs would be
-            kit.Frame = Matrix4x4.Translate(new Vector3(0f, 0.28f, -0.12f));
-            kit.Ball(new Vector3(0, 1.05f, 0), new Vector3(0.6f, 0.72f, 0.44f), s.shirt);
-            kit.Cyl(new Vector3(0, 0.82f, 0), new Vector3(0.5f, 0.2f, 0.38f), s.skirt.Value);
-            kit.Cone(new Vector3(0, 0.52f, 0.02f), new Vector3(0.7f, 0.6f, 0.66f), s.skirt.Value, default, 0.62f, 12);
-            kit.Box(new Vector3(0, 1.17f, 0.22f), new Vector3(0.3f, 0.26f, 0.04f), s.apron.Value, new Vector3(-12, 0, 0));
-            kit.Cyl(new Vector3(0, 1.38f, 0), new Vector3(0.38f, 0.1f, 0.34f), s.scarf.Value);
-            // Scarf ends streaming out behind her
-            kit.Box(new Vector3(0.06f, 1.36f, -0.3f), new Vector3(0.1f, 0.04f, 0.3f), s.scarf.Value, new Vector3(-12, 10, 0));
-            kit.Box(new Vector3(-0.04f, 1.31f, -0.36f), new Vector3(0.1f, 0.04f, 0.36f), s.scarf.Value, new Vector3(-20, -8, 0));
-            for (int i = 0; i < 7; i++)
-            {
-                float a = Mathf.Lerp(-70, 70, i / 6f) * Mathf.Deg2Rad;
-                kit.Ball(new Vector3(Mathf.Sin(a) * 0.17f, 1.33f - Mathf.Cos(a) * 0.05f, 0.14f + Mathf.Cos(a) * 0.07f), 0.05f, new Color(0.97f, 0.95f, 0.9f));
-            }
-            Head(s, 1.66f);
-            // Riding goggles pushed up on her forehead
-            kit.Cyl(new Vector3(0f, 1.86f, -0.01f), new Vector3(0.55f, 0.05f, 0.53f), new Color(0.3f, 0.2f, 0.12f), default, 14);
-            for (int side = -1; side <= 1; side += 2)
-                kit.Cyl(new Vector3(side * 0.1f, 1.88f, 0.23f), new Vector3(0.15f, 0.06f, 0.15f), new Color(1f, 0.7f, 0.2f), new Vector3(70, 0, 0), 10);
-            kit.Frame = Matrix4x4.identity;
-            m.body = kit.ToMesh("BikeNonna");
-            m.armL = Arm(s, Held.None, true);
-            m.armR = Arm(s, Held.None, false);
-            return m;
-        }
-
-        /// <summary>An arc of bars in the YZ plane (a wheel or mudguard seen from the side); angles from +Z toward +Y.</summary>
-        private static void Ring(Vector3 center, float radius, int segments, float thickness, Color color, float fromDeg, float toDeg)
-        {
-            for (int i = 0; i < segments; i++)
-            {
-                float a0 = Mathf.Lerp(fromDeg, toDeg, (float)i / segments) * Mathf.Deg2Rad;
-                float a1 = Mathf.Lerp(fromDeg, toDeg, (float)(i + 1) / segments) * Mathf.Deg2Rad;
-                kit.Bar(center + new Vector3(0f, Mathf.Sin(a0), Mathf.Cos(a0)) * radius, center + new Vector3(0f, Mathf.Sin(a1), Mathf.Cos(a1)) * radius, thickness, color);
             }
         }
 

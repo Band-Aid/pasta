@@ -107,11 +107,13 @@ namespace PastaSurvivors
                 && !IsBoss && !IsProp && !r.seated && (r.freeHandL || r.freeHandR);
             // Never resume a half-finished gesture after an attack, hit or loss of approach.
             if (!canGesture) InterruptApproachGesture();
+            var g = r.gait;
             float amp = Mathf.Clamp01(moveSpeed / 2f);
             bool panic = fleeing || fear > 0f;
-            float rate = panic ? 22f : 5f + moveSpeed * 2.4f;
+            float move = Mathf.Max(amp, panic ? 1f : 0f);
+            float rate = panic ? 22f : (5f + moveSpeed * 2.4f) * g.cadence;
             walkPhase += dt * rate;
-            float s = Mathf.Sin(walkPhase);
+            float s = Mathf.Sin(walkPhase), c = Mathf.Cos(walkPhase);
             gesture += dt;
             if (r.wheels != null)
             {
@@ -119,15 +121,34 @@ namespace PastaSurvivors
                 r.wheelAngle = Mathf.Repeat(r.wheelAngle + moveSpeed / (r.wheelRadius * scale) * Mathf.Rad2Deg * dt, 360f);
                 var roll = Quaternion.Euler(r.wheelAngle, 0f, 0f);
                 foreach (var w in r.wheels) w.localRotation = roll;
+                if (r.crank != null) r.crank.localRotation = Quaternion.Euler(r.wheelAngle * 0.5f, 0f, 0f);
             }
             if (r.legL != null)
             {
-                float legAmp = panic ? 55f : 34f * amp;
-                r.legL.localRotation = Quaternion.Euler(s * legAmp, 0, 0);
-                r.legR.localRotation = Quaternion.Euler(-s * legAmp, 0, 0);
+                float legAmp = panic ? 55f : g.stride * amp;
+                r.legL.localRotation = Quaternion.Euler(s * legAmp, -g.toeOut, -g.legOut);
+                r.legR.localRotation = Quaternion.Euler(-s * legAmp, g.toeOut, g.legOut);
             }
-            float bob = r.seated ? Mathf.Abs(Mathf.Sin(walkPhase * 0.5f)) * 0.03f : Mathf.Abs(Mathf.Cos(walkPhase)) * 0.07f * Mathf.Max(amp, panic ? 1f : 0f);
+            float bob = r.seated ? Mathf.Abs(Mathf.Sin(walkPhase * 0.5f)) * g.bob : Mathf.Abs(c) * g.bob * move;
             r.torso.localPosition = new Vector3(0f, bob, 0f);
+            // Vehicles weave from side to side; people lean, sway their hips and swing their shoulders.
+            if (g.roll != 0f) r.torso.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(walkPhase * 0.21f) * g.roll * amp);
+            if (r.spine != null) r.spine.localRotation = Quaternion.Euler(g.lean * amp + (panic ? 10f : 0f), s * g.twist * move, s * g.sway * move);
+            if (r.head != null)
+            {
+                // Bursts of "no, no, no", a nod on each step, a singer's roll, or the handlebars steering.
+                float shake = g.headShake * Mathf.Sin(gesture * 11f) * Mathf.Max(0f, Mathf.Sin(gesture * 1.7f));
+                float steer = g.headSteer * Mathf.Sin(walkPhase * 0.21f + 0.6f) * amp;
+                r.head.localRotation = Quaternion.Euler(g.headPitch + Mathf.Abs(c) * g.headNod * move, shake + steer, Mathf.Sin(walkPhase * 0.5f) * g.headRoll * move);
+            }
+            if (r.belly != null)
+            {
+                // The belly lags behind each step and wobbles.
+                float j = Mathf.Cos(2f * walkPhase - 1.3f) * g.belly * move;
+                r.belly.localPosition = r.bellyPos + new Vector3(0f, -0.025f * j, 0f);
+                r.belly.localScale = new Vector3(1f + 0.04f * j, 1f - 0.05f * j, 1f + 0.04f * j);
+            }
+            if (r.prop != null) AnimateProp(s, c, move);
             if (r.armL == null) return;
             if (panic)
             {
@@ -140,11 +161,28 @@ namespace PastaSurvivors
             {
                 // Wind-up: throwing arm back and up.
                 r.armR.localRotation = Quaternion.Euler(-160f + Mathf.Sin(gesture * 30f) * 6f, 0f, 10f);
-                r.armL.localRotation = Quaternion.Euler(r.armRest - 20f, 0f, -10f);
+                r.armL.localRotation = Quaternion.Euler(r.restL.x - 20f, r.restL.y, r.restL.z - 6f);
                 return;
             }
-            ResetArmPose(s * 28f * amp);
+            ResetArmPose(s * g.armSwing * amp);
             if (canGesture) AnimateApproachGesture(dt, gesturePercent);
+        }
+
+        private void AnimateProp(float s, float c, float move)
+        {
+            var r = rig;
+            switch (r.propMotion)
+            {
+                case PropMotion.Wave: // a flag flapping on its pole
+                    r.prop.localRotation = r.propBase * Quaternion.Euler(0f, Mathf.Sin(gesture * 8f) * 22f + Mathf.Sin(gesture * 13f) * 8f, 0f);
+                    break;
+                case PropMotion.Spin: // pizza dough spinning on a fingertip
+                    r.prop.localRotation = r.propBase * Quaternion.Euler(0f, Mathf.Repeat(gesture * 600f, 360f), 0f);
+                    break;
+                case PropMotion.Swing: // a heavy bag swinging at the hip
+                    r.prop.localRotation = r.propBase * Quaternion.Euler(s * 14f * move, 0f, c * 6f * move);
+                    break;
+            }
         }
 
         private void ResetArmPose(float swing)
@@ -153,12 +191,13 @@ namespace PastaSurvivors
             if (r.armL == null || r.armR == null) return;
             if (r.seated)
             {
-                r.armL.localRotation = Quaternion.Euler(r.armRest, 0f, 8f);
-                r.armR.localRotation = Quaternion.Euler(r.armRest, 0f, -8f);
+                r.armL.localRotation = Quaternion.Euler(r.restL);
+                r.armR.localRotation = Quaternion.Euler(r.restR);
                 return;
             }
-            r.armL.localRotation = Quaternion.Euler(r.armRest - swing, 0f, -4f);
-            r.armR.localRotation = Quaternion.Euler(r.armRest + swing, 0f, 4f);
+            var g = r.gait;
+            r.armL.localRotation = Quaternion.Euler(r.restL.x - swing * g.swingL, r.restL.y, r.restL.z - g.armOut);
+            r.armR.localRotation = Quaternion.Euler(r.restR.x + swing * g.swingR, r.restR.y, r.restR.z + g.armOut);
         }
 
         private void AnimateApproachGesture(float dt, float gesturePercent)

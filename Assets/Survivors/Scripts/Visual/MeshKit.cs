@@ -26,7 +26,7 @@ namespace PastaSurvivors
         /// <summary>Applied before every primitive's own transform; lets callers build sub-assemblies in local space.</summary>
         public Matrix4x4 Frame = Matrix4x4.identity;
 
-        private static Template box, sphere, lowSphere, quad;
+        private static Template box, sphere, lowSphere, dot, quad;
         private static readonly Dictionary<int, Template> frustums = new Dictionary<int, Template>();
 
         public int VertexCount => verts.Count;
@@ -40,6 +40,26 @@ namespace PastaSurvivors
 
         public MeshKit Ball(Vector3 pos, float diameter, Color col) => Ball(pos, Vector3.one * diameter, col);
 
+        /// <summary>A very low-poly sphere for small details (buttons, pupils, curls, pearls).</summary>
+        public MeshKit Dot(Vector3 pos, float diameter, Color col)
+            => Add(dot ??= MakeSphere(4, 6), Matrix4x4.TRS(pos, Quaternion.identity, Vector3.one * diameter), col);
+
+        /// <summary>A very low-poly ellipsoid for small details that need a shape (blush, tongue, curls).</summary>
+        public MeshKit Blob(Vector3 pos, Vector3 size, Color col, Vector3 euler = default)
+            => Add(dot ??= MakeSphere(4, 6), Matrix4x4.TRS(pos, Quaternion.Euler(euler), size), col);
+
+        /// <summary>
+        /// A tapered limb between two points: diameter <paramref name="da"/> at a, <paramref name="db"/> at b.
+        /// Open-ended unless <paramref name="caps"/>, since joints, hands and shoes usually cover the ends.
+        /// </summary>
+        public MeshKit Taper(Vector3 a, Vector3 b, float da, float db, Color col, int sides = 8, bool caps = false)
+        {
+            Vector3 d = b - a;
+            var rot = Quaternion.FromToRotation(Vector3.up, d.normalized);
+            var m = Matrix4x4.TRS((a + b) * 0.5f, rot, new Vector3(da, d.magnitude, da));
+            return Add(Frustum(db / da, sides, caps), m, col);
+        }
+
         /// <summary>Cylinder: size.x/z = diameters, size.y = height.</summary>
         public MeshKit Cyl(Vector3 pos, Vector3 size, Color col, Vector3 euler = default, int sides = 10)
             => Add(Frustum(1f, sides), Matrix4x4.TRS(pos, Quaternion.Euler(euler), size), col);
@@ -52,12 +72,12 @@ namespace PastaSurvivors
             => Add(quad ??= MakeQuad(), Matrix4x4.TRS(pos, Quaternion.Euler(euler), new Vector3(size.x, 1f, size.y)), col);
 
         /// <summary>A limb or bar between two points.</summary>
-        public MeshKit Bar(Vector3 a, Vector3 b, float thickness, Color col, bool round = true)
+        public MeshKit Bar(Vector3 a, Vector3 b, float thickness, Color col, bool round = true, int sides = 8)
         {
             Vector3 d = b - a;
             var rot = Quaternion.FromToRotation(Vector3.up, d.normalized);
             var m = Matrix4x4.TRS((a + b) * 0.5f, rot, new Vector3(thickness, d.magnitude, thickness));
-            return Add(round ? Frustum(1f, 8) : (box ??= MakeBox()), m, col);
+            return Add(round ? Frustum(1f, sides) : (box ??= MakeBox()), m, col);
         }
 
         public MeshKit Add(MeshKit other, Matrix4x4 m)
@@ -209,9 +229,9 @@ namespace PastaSurvivors
             return Fix(v, n, uv, t);
         }
 
-        private static Template Frustum(float topRatio, int sides)
+        private static Template Frustum(float topRatio, int sides, bool caps = true)
         {
-            int key = Mathf.RoundToInt(topRatio * 100f) * 100 + sides;
+            int key = (Mathf.RoundToInt(topRatio * 100f) * 100 + sides) * (caps ? 1 : -1);
             if (frustums.TryGetValue(key, out var cached)) return cached;
             var v = new List<Vector3>(); var n = new List<Vector3>(); var uv = new List<Vector2>(); var t = new List<int>();
             float rb = 0.5f, rt = 0.5f * topRatio;
@@ -230,7 +250,7 @@ namespace PastaSurvivors
                 t.Add(a); t.Add(a + 1); t.Add(a + 3);
                 t.Add(a); t.Add(a + 3); t.Add(a + 2);
             }
-            for (int cap = 0; cap < 2; cap++)
+            for (int cap = 0; cap < (caps ? 2 : 0); cap++)
             {
                 float r = cap == 0 ? rb : rt;
                 if (r < 0.001f) continue;
