@@ -297,6 +297,7 @@ namespace PastaSurvivors
                 {
                     index = 0, theme = StageTheme.Roma, name = "ローマ", sub = "トラステヴェレの広場", boss = EnemyKind.BossNonna,
                     bossName = "グランデ・ノンナ", hpMul = 1f, damageMul = 1f, music = "Pursuit of the Button_no1",
+                    bossMusic = "Pasta la vista",
                     hpPerLevel = 0.02f, damagePerLevel = 0.006f, // the first stage stays forgiving for new players
                     phases = new[]
                     {
