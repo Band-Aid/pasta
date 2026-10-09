@@ -25,6 +25,22 @@ namespace PastaSurvivors
         public const float HealCapacity = 45f, HealRefill = 0.5f;
         public struct Road { public Vector3 a, b; public float width; }
 
+        /// <summary>Local terrain identity and normal-wave modifiers; scheduled events remain stage-wide.</summary>
+        public class District
+        {
+            public Rect bounds;
+            public string name, hint;
+            public Color color;
+            public float population, interval;
+            public (EnemyKind kind, float weight)[] preferences;
+
+            public float Weight(EnemyKind kind)
+            {
+                foreach (var p in preferences) if (p.kind == kind) return p.weight;
+                return 1f;
+            }
+        }
+
         /// <summary>The same piecewise-linear arch is used for the rendered deck and its walking surface.</summary>
         public struct BridgeSurface
         {
@@ -58,6 +74,7 @@ namespace PastaSurvivors
         public readonly List<Wall> walls = new List<Wall>();
         public readonly List<Area> areas = new List<Area>();
         public readonly List<Road> roads = new List<Road>();
+        public readonly List<District> districts = new List<District>();
         private readonly List<BridgeSurface> bridges = new List<BridgeSurface>();
         /// <summary>Pedestals where special weapons appear.</summary>
         public readonly List<Vector3> specialSpots = new List<Vector3>();
@@ -66,6 +83,19 @@ namespace PastaSurvivors
         public Vector3 spawn;
 
         public Arena(Vector2 min, Vector2 max) { this.min = min; this.max = max; }
+
+        public void AddDistrict(Rect bounds, string name, string hint, Color color, float population, float interval,
+            params (EnemyKind kind, float weight)[] preferences)
+            => districts.Add(new District { bounds = bounds, name = name, hint = hint, color = color,
+                population = population, interval = interval, preferences = preferences });
+
+        /// <summary>Earlier districts take priority where regions overlap.</summary>
+        public District DistrictAt(Vector3 p)
+        {
+            var point = new Vector2(p.x, p.z);
+            foreach (var d in districts) if (d.bounds.Contains(point)) return d;
+            return null;
+        }
 
         public void AddObstacle(Vector3 pos, float radius, bool blocksShots = false)
             => obstacles.Add(new Obstacle { c = new Vector2(pos.x, pos.z), r = radius, blocksShots = blocksShots });

@@ -7,6 +7,8 @@ namespace PastaSurvivors
         private StageDef stage;
         private int nextEvent;
         private float spawnTimer;
+        private float localPopulation = 1f, localInterval = 1f;
+        private Arena.District district;
         public bool BossSpawned { get; private set; }
         public float TimeScale = 1f;   // stage duration multiplier (tests use shorter runs)
 
@@ -15,6 +17,8 @@ namespace PastaSurvivors
             stage = def;
             nextEvent = 0;
             spawnTimer = 0.5f;
+            localPopulation = localInterval = 1f;
+            district = null;
             BossSpawned = false;
         }
 
@@ -47,19 +51,25 @@ namespace PastaSurvivors
             }
 
             var phase = CurrentPhase(t);
+            district = G.Arena != null && G.Player != null ? G.Arena.DistrictAt(G.Player.Position) : null;
+            // Crossing into a quieter district slows reinforcement over a few seconds; the pursuing horde stays.
+            float blend = 1f - Mathf.Exp(-dt / 4f);
+            localPopulation = Mathf.Lerp(localPopulation, district != null ? district.population : 1f, blend);
+            localInterval = Mathf.Lerp(localInterval, district != null ? district.interval : 1f, blend);
+            int minAlive = Mathf.RoundToInt(phase.minAlive * localPopulation);
             int alive = G.Enemies.HostileCount;
             spawnTimer -= dt;
-            if (alive < phase.minAlive)
+            if (alive < minAlive)
             {
                 // Fill quickly up to the minimum, a few per frame.
-                int deficit = Mathf.Min(phase.minAlive - alive, 6);
+                int deficit = Mathf.Min(minAlive - alive, 6);
                 for (int i = 0; i < deficit; i++) SpawnOne(phase);
             }
             // Periodic trickle on top of the minimum, capped so a slow start can't snowball.
             if (spawnTimer <= 0f)
             {
-                spawnTimer = phase.interval;
-                if (alive < phase.minAlive * 1.6f + 10)
+                spawnTimer = phase.interval * localInterval;
+                if (alive < minAlive * 1.6f + 10)
                     for (int i = 0; i < phase.batch; i++) SpawnOne(phase);
             }
         }
@@ -67,12 +77,13 @@ namespace PastaSurvivors
         private void SpawnOne(WavePhase phase)
         {
             float total = 0f;
-            foreach (var m in phase.mix) total += m.weight;
+            // Reweight only enemies already unlocked by this phase, never introduce later-stage kinds early.
+            foreach (var m in phase.mix) total += m.weight * (district != null ? district.Weight(m.kind) : 1f);
             float r = Random.value * total;
             var kind = phase.mix[0].kind;
             foreach (var m in phase.mix)
             {
-                r -= m.weight;
+                r -= m.weight * (district != null ? district.Weight(m.kind) : 1f);
                 if (r <= 0f) { kind = m.kind; break; }
             }
             var def = GameData.Enemy(kind);
