@@ -44,7 +44,7 @@ namespace PastaSurvivors
     public enum ShotKind { Penne, Fusilli, Farfalle, Ketchup, Pizza, Slipper, Dough, Meatball, Pineapple, Oar, Bazooka, Drop, Parmesan }
 
     /// <summary>Special weapons: picked up on the map, fired manually, then cool down.</summary>
-    public enum SpecialId { Bazooka, KnifeDash, Parmesan, Sprinkler, SugarEspresso, StarBeam }
+    public enum SpecialId { Bazooka, MayoJet, Parmesan, Sprinkler, SugarEspresso, FrappeBeam }
 
     public class SpecialDef
     {
@@ -242,7 +242,7 @@ namespace PastaSurvivors
                 new WeaponDef
                 {
                     id = WeaponId.CarbonaraAura, mainTrait = "主武器：命中時にHP回復（攻撃1回につき最大1.5HP）", name = "生クリームカルボナーラ", icon = "carbonara", evoIcon = "cream",
-                    desc = "カルボナーラに生クリーム!? 周囲のイタリア人にダメージを与え続ける。",
+                    desc = "カルボナーラに生クリーム!? 足元に広がるクリームソースが約1秒ごとに波打ち、輪の中のイタリア人にクリームを浴びせる。",
                     evoName = "クリーム地獄", evoPartner = PassiveId.RecipeBook,
                     evoDesc = "範囲が広がり、命中時にHP回復（攻撃1回につき最大1.5HP）。敵を遅くする。",
                     baseStats = S(dmg: 5, cd: 0.9f, area: 1f, kb: 0.6f, amt: 1),
@@ -413,16 +413,16 @@ namespace PastaSurvivors
             {
                 new SpecialDef { id = SpecialId.Bazooka, name = "乾麺バズーカ", icon = "bazooka", cooldown = 7f,
                     desc = "スパゲッティの束を撃ち込み、着弾点でまとめて折る大爆発。" },
-                new SpecialDef { id = SpecialId.KnifeDash, name = "ナイフで一刀両断", icon = "knife", cooldown = 5f,
-                    desc = "パスタをナイフで切る禁忌の突進。進路上のイタリア人を斬り抜ける（無敵）。" },
+                new SpecialDef { id = SpecialId.MayoJet, name = "マヨネーズ・ジェット", icon = "mayo", cooldown = 6f,
+                    desc = "ピザにもパスタにもマヨネーズ!? 特大マヨを逆噴射して爆走（無敵）。轢いたイタリア人も、マヨの跡を踏んだイタリア人もツルッと転ぶ。" },
                 new SpecialDef { id = SpecialId.Parmesan, name = "粉チーズ手榴弾", icon = "parmesan", cooldown = 11f,
                     desc = "偽物の粉チーズの雲。範囲内のイタリア人が呆然と立ち尽くす。" },
                 new SpecialDef { id = SpecialId.Sprinkler, name = "ケチャップ・スプリンクラー", icon = "sprinkler", cooldown = 14f,
                     desc = "その場に設置。8秒間ケチャップを撒き散らす。通路の入口に置くと強い。" },
                 new SpecialDef { id = SpecialId.SugarEspresso, name = "砂糖10杯エスプレッソ", icon = "sugar", cooldown = 18f,
                     desc = "7秒間、移動速度+40%・全武器のクールダウン半減。" },
-                new SpecialDef { id = SpecialId.StarBeam, name = "スタ〇ビーム", icon = "starbeam", cooldown = 16f,
-                    desc = "巨大フラペ〇ーノから緑と白のビームを照射。チェーン店のコーヒーに耐えられないイタリア人は恐怖で逃げ惑う。" },
+                new SpecialDef { id = SpecialId.FrappeBeam, name = "フラペビーム", icon = "frappe", cooldown = 16f,
+                    desc = "巨大フラペから、ホイップとキャラメルが渦巻く氷のビームを照射。甘すぎるコーヒーで頭がキーンとなったイタリア人は逃げ惑う。" },
             };
 
             Shop = new[]

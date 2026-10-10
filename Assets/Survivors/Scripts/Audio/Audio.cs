@@ -56,7 +56,9 @@ namespace PastaSurvivors
             clips[SfxId.Dash] = Make("dash", 0.22f, (t, n) => n * Mathf.Sin(Mathf.PI * t / 0.22f) * 0.4f + Mathf.Sin(2 * Mathf.PI * (200f + 600f * t) * t) * 0.15f * Env(t, 0.01f, 8f));
             clips[SfxId.Select] = Make("select", 0.05f, (t, n) => Sq(t * 880f) * Env(t, 0.001f, 60f) * 0.25f);
             clips[SfxId.Confirm] = Make("confirm", 0.18f, (t, n) => (Sq(t * (t < 0.06f ? 660f : 990f))) * Env(t, 0.001f, 14f) * 0.3f);
-            clips[SfxId.Beam] = Make("beam", 0.5f, (t, n) => (Saw(t * 180f) * 0.25f + Saw(t * 271f) * 0.2f + Mathf.Sin(2 * Mathf.PI * 880f * t) * 0.12f * Mathf.Sin(t * 60f) + n * 0.12f)
+            // Frappé Beam: a blender's motor whine with crushed ice rattling against the jug.
+            clips[SfxId.Beam] = Make("beam", 0.5f, (t, n) => (Saw(t * 210f + Mathf.Sin(t * 37f) * 0.6f) * 0.2f + Saw(t * 317f) * 0.1f
+                + n * (Mathf.Sin(t * 2 * Mathf.PI * 23f) > 0.55f ? 0.38f : 0.08f))
                 * Mathf.Min(1f, t / 0.04f) * Mathf.Min(1f, (0.5f - t) / 0.08f));
             // Bicycle bell: two strikes of an inharmonic bell with a clapper rattle.
             clips[SfxId.Bell] = Make("bell", 0.75f, (t, n) => Bell(t) + Bell(t - 0.17f) * 0.9f);

@@ -189,13 +189,21 @@ namespace PastaSurvivors
                     Circle(26, 23, 4, Or); Circle(27, 24, 2.2f, YL);
                     Spark(25, 22, Wt);
                     break;
-                case "knife":
-                    Tri(new Vector2(6, 26), new Vector2(10, 29), new Vector2(22, 12), Gy);
-                    Line(9, 27, 21, 13, 0.6f, Wt);
-                    Line(22, 12, 27, 6, 2.2f, Br);
-                    Line(4, 12, 28, 18, 1.1f, Y);
-                    Line(14, 15, 16, 14, 0.9f, Wt);
-                    break;
+                case "mayo":
+                    {
+                        var mayo = new Color(1f, 0.93f, 0.68f);
+                        for (int i = 0; i < 3; i++) Line(2, 8 + i * 5, 7, 8 + i * 5, 0.7f, Wt);
+                        Rect(11, 4, 21, 20, mayo);
+                        Ellipse(16, 4, 5, 2, mayo);
+                        Ellipse(16, 20, 5, 3, mayo);
+                        Rect(11, 9, 21, 14, Wt);
+                        Rect(11, 11, 21, 12, Rd);
+                        Rect(14, 22, 18, 26, Rd);
+                        Tri(new Vector2(14.5f, 26), new Vector2(17.5f, 26), new Vector2(16, 29.5f), Rd);
+                        Circle(25, 27, 2.2f, mayo);
+                        Circle(27, 22, 1.4f, mayo);
+                        break;
+                    }
                 case "parmesan":
                     Rect(10, 4, 22, 22, new Color(0.2f, 0.55f, 0.3f));
                     Rect(10, 22, 22, 25, Y);
@@ -219,13 +227,21 @@ namespace PastaSurvivors
                     Rect(6, 20, 11, 25, Wt); Rect(13, 22, 18, 27, Wt); Rect(20, 19, 25, 24, Wt);
                     Line(25, 6, 29, 14, 1f, Y); Line(29, 14, 26, 14, 1f, Y); Line(26, 14, 30, 22, 1f, Y);
                     break;
-                case "starbeam":
-                    Circle(16, 16, 14, new Color(0f, 0.5f, 0.28f));
-                    Ring(16, 16, 11, 1.1f, Wt);
-                    Tri(new Vector2(16, 26), new Vector2(11, 8), new Vector2(24, 18), Wt);
-                    Tri(new Vector2(16, 26), new Vector2(21, 8), new Vector2(8, 18), Wt);
-                    Tri(new Vector2(8, 18), new Vector2(24, 18), new Vector2(16, 12), Wt);
-                    break;
+                case "frappe":
+                    {
+                        var caramel = new Color(0.8f, 0.5f, 0.18f);
+                        Trapezoid(16, 3, 9, 5, 6, new Color(0.62f, 0.44f, 0.3f));
+                        Trapezoid(16, 9, 19, 6, 7.5f, new Color(0.86f, 0.73f, 0.58f));
+                        Line(11.5f, 18, 12.5f, 12, 0.6f, caramel);
+                        Line(19.5f, 18, 19, 14, 0.6f, caramel);
+                        Rect(8, 19, 24, 21, Gy);
+                        Line(19, 23, 24, 31, 1.3f, Gr);
+                        Ellipse(16, 22, 8, 4.5f, Wt);
+                        Circle(16, 26, 3, Wt);
+                        Line(10, 22, 13, 25, 0.6f, caramel); Line(13, 25, 16, 22, 0.6f, caramel);
+                        Line(16, 22, 19, 25, 0.6f, caramel); Line(19, 25, 22, 22, 0.6f, caramel);
+                        break;
+                    }
                 case "arrow":
                     Tri(new Vector2(16, 30), new Vector2(4, 8), new Vector2(28, 8), UiKit.Gold);
                     Tri(new Vector2(16, 24), new Vector2(9, 11), new Vector2(23, 11), YL);
@@ -258,6 +274,16 @@ namespace PastaSurvivors
             }
             Circle(x1, y1, w * 0.42f, YD);
             Circle(x1, y1, w * 0.22f, BrD);
+        }
+
+        /// <summary>A trapezoid centred on x, from half-width w0 at y0 to w1 at y1.</summary>
+        private static void Trapezoid(float cx, float y0, float y1, float w0, float w1, Color c)
+        {
+            for (int y = Mathf.FloorToInt(y0); y < Mathf.CeilToInt(y1); y++)
+            {
+                float w = Mathf.Lerp(w0, w1, (y + 0.5f - y0) / (y1 - y0));
+                Rect(cx - w, y, cx + w, y + 1, c);
+            }
         }
 
         private static void Lasagna(int drop)

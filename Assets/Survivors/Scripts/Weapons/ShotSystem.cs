@@ -26,6 +26,8 @@ namespace PastaSurvivors
         public float tickTimer, tickInterval, slow;
         public float explodeRadius, explodeDamage, explodeKnock = 3f;
         public bool sticky;
+        /// <summary>Zone of mayonnaise: Italians who step in it slip and fall.</summary>
+        public bool slippery;
         public int bounces;
         public Action<Shot> onEnd;
     }
@@ -69,6 +71,7 @@ namespace PastaSurvivors
             s.explodeKnock = 3f;
             s.slow = 0f;
             s.sticky = false;
+            s.slippery = false;
             s.spin = UnityEngine.Random.value * 360f;
             s.scale = 1f;
             s.go.SetActive(true);
@@ -391,6 +394,7 @@ namespace PastaSurvivors
                 var e = hits[i];
                 if (s.slow > 0f) e.slow = Mathf.Max(e.slow, s.tickInterval + 0.1f);
                 if (s.sticky && !e.IsBoss) e.stun = Mathf.Max(e.stun, s.tickInterval + 0.05f);
+                if (s.slippery) G.Enemies.Slip(e);
                 if (e.immune[s.slot] > now) continue;
                 e.immune[s.slot] = now + s.tickInterval * 0.9f;
                 G.Enemies.Damage(e, s.damage, Vector3.zero, 0f, s.slot);
