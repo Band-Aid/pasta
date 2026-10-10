@@ -15,8 +15,11 @@ namespace PastaSurvivors
         public Vector3 pos, facing = Vector3.back, knock;
         public float hp, maxHp, damage, speedMul = 1f, radius, scale;
         public float flash, stun, slow, buff;
-        /// <summary>Scared (Sta○ Beam): runs away from the player with arms in the air.</summary>
+        /// <summary>Scared (Frappé Beam): runs away from the player with arms in the air.</summary>
         public float fear;
+        /// <summary>Slipped on mayonnaise: time left flat on the back, and until the next slip can happen.</summary>
+        public float slip, slipCooldown;
+        public const float SlipTime = 0.9f;
         public bool flashing, fleeing, frozen, active;
         public float fleeT;
         public Vector3 fleeDir;
@@ -88,11 +91,20 @@ namespace PastaSurvivors
             // Spawned, fleeing and recycled actors also follow the raised walking surface.
             if (G.Arena != null) pos.y = G.Arena.GroundHeight(pos);
             var t = rig.root;
-            t.position = pos + Vector3.up * lift;
+            // Slipping: the feet shoot up, the body lands flat on its back, then gets up again.
+            float fall = 0f, hop = 0f;
+            if (slip > 0f && !fleeing)
+            {
+                float k = 1f - slip / SlipTime;
+                fall = 80f * Mathf.Clamp01(k / 0.15f) * Mathf.Clamp01((1f - k) / 0.25f);
+                hop = Mathf.Sin(Mathf.Clamp01(k / 0.3f) * Mathf.PI) * 0.35f;
+            }
+            t.position = pos + Vector3.up * (lift + hop);
             if (facing.sqrMagnitude > 0.0001f)
             {
                 var rot = Quaternion.LookRotation(facing);
                 if (spin != 0f) rot = rot * Quaternion.Euler(0f, 0f, spin);
+                if (fall > 0f) rot = rot * Quaternion.Euler(-fall, 0f, 0f);
                 t.rotation = rot;
             }
         }

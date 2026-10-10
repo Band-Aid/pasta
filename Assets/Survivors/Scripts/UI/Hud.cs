@@ -313,9 +313,8 @@ namespace PastaSurvivors
         private void UpdateMinimap(Player p)
         {
             if (G.Arena == null || minimapTex == null) return;
-            // Dots are children of the map image, whose pivot is the centre; offset by half the size.
-            var half = minimapImage.rectTransform.sizeDelta * 0.5f;
-            mapPlayer.rectTransform.anchoredPosition = MapPos(p.Position) - half;
+            // Dots are anchored to the map image's bottom-left corner, the same origin MapPos uses.
+            mapPlayer.rectTransform.anchoredPosition = MapPos(p.Position);
             int n = 0;
             void Dot(Vector3 at, Color c, float size)
             {
@@ -324,7 +323,7 @@ namespace PastaSurvivors
                 d.enabled = true;
                 d.color = c;
                 d.rectTransform.sizeDelta = new Vector2(size, size);
-                d.rectTransform.anchoredPosition = MapPos(at) - half;
+                d.rectTransform.anchoredPosition = MapPos(at);
             }
             float pulse = 10f + Mathf.Sin(Time.unscaledTime * 6f) * 3f;
             foreach (var s in G.Arena.specialSpots) Dot(s, new Color(0.9f, 0.85f, 0.7f, 0.5f), 6f);

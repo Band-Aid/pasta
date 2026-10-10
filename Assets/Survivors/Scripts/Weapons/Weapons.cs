@@ -443,6 +443,8 @@ namespace PastaSurvivors
                     healBudget -= healing;
                 }
             }
+            G.Fx.CreamWave(P.Position, radius, hits, n, evolved);
+            if (n > 0) G.Sfx.Play(SfxId.Splat, 0.18f, Random.Range(1.4f, 1.6f));
         }
 
         public override void Tick(float dt)

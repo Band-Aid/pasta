@@ -18,8 +18,8 @@ namespace PastaSurvivors
         private Transform viewRoot, viewAnchor, viewHandL, viewHandR;
         private readonly List<Renderer> viewRenderers = new List<Renderer>();
         private PastaVisual bundle;
-        private GameObject heldItem, beamCup;
-        private bool beaming;
+        private GameObject heldItem, beamCup, mayoBottle;
+        private bool beaming, jetting;
         private WeaponId? shownMain;
         private bool shownFirstPerson, firstPerson;
         private float phase, throwT, slamT, snapT, respawnT, switchT;
@@ -124,7 +124,8 @@ namespace PastaSurvivors
         private void ClearHeld()
         {
             if (beamCup != null) { Destroy(beamCup); beamCup = null; }
-            beaming = false;
+            if (mayoBottle != null) { Destroy(mayoBottle); mayoBottle = null; }
+            beaming = jetting = false;
             if (heldItem != null)
             {
                 viewRenderers.Remove(heldItem.GetComponent<Renderer>());
@@ -165,13 +166,13 @@ namespace PastaSurvivors
 
         public void Throw() => throwT = 0.28f;
 
-        /// <summary>Hold the giant parody frappé out in front while the Sta○ Beam fires.</summary>
+        /// <summary>Hold the giant frappé out in front while the Frappé Beam fires.</summary>
         public void SetBeaming(bool on)
         {
             beaming = on;
             if (on)
             {
-                if (beamCup == null) beamCup = Models.Static(Models.Get("special_StarBeam"), Anchor, "Frappe", Mats.Lit, !firstPerson);
+                if (beamCup == null) beamCup = Models.Static(Models.Get("special_FrappeBeam"), Anchor, "Frappe", Mats.Lit, !firstPerson);
                 beamCup.transform.SetParent(Anchor, false);
                 beamCup.transform.localPosition = firstPerson ? new Vector3(0.05f, 0f, 0.1f) : new Vector3(0f, 0f, 0.1f);
                 beamCup.transform.localRotation = Quaternion.Euler(70f, 0f, 0f);
@@ -182,6 +183,24 @@ namespace PastaSurvivors
             if (heldItem != null) heldItem.SetActive(!on);
             if (bundle != null) bundle.gameObject.SetActive(!on);
         }
+        /// <summary>Clutch the giant mayonnaise under the arm, nozzle backwards, while the Mayo Jet squirts.</summary>
+        public void SetJetting(bool on)
+        {
+            jetting = on;
+            if (on)
+            {
+                if (mayoBottle == null) mayoBottle = Models.Static(Models.Get("special_MayoJet"), Anchor, "Mayo", Mats.Lit, !firstPerson);
+                mayoBottle.transform.SetParent(Anchor, false);
+                mayoBottle.transform.localPosition = firstPerson ? new Vector3(0.25f, -0.15f, 0.25f) : new Vector3(0.25f, -0.12f, -0.2f);
+                mayoBottle.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
+                mayoBottle.transform.localScale = Vector3.one * (firstPerson ? 0.35f : 0.75f);
+                mayoBottle.SetActive(true);
+            }
+            else if (mayoBottle != null) mayoBottle.SetActive(false);
+            if (heldItem != null) heldItem.SetActive(!on && !beaming);
+            if (bundle != null) bundle.gameObject.SetActive(!on && !beaming);
+        }
+
         public void Slam() => slamT = 0.4f;
         public void OnSwitch() => switchT = 0.25f;
 
@@ -266,6 +285,7 @@ namespace PastaSurvivors
             else if (lasagna.gameObject.activeSelf) lasagna.gameObject.SetActive(false);
 
             if (beaming) { armL = armR = -88f; zL = -18f; zR = 18f; }
+            else if (jetting) { armL = armR = -55f; zL = -8f; zR = 12f; }
             rig.armL.localRotation = Quaternion.Euler(armL, 0f, zL);
             rig.armR.localRotation = Quaternion.Euler(armR, 0f, zR);
 

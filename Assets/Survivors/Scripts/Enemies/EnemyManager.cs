@@ -79,6 +79,7 @@ namespace PastaSurvivors
             e.speedMul = 1f;
             e.knock = Vector3.zero;
             e.stun = e.slow = e.buff = e.flash = e.fear = 0f;
+            e.slip = e.slipCooldown = 0f;
             e.state = 0; e.pattern = -1; e.volleys = 0;
             e.stateTimer = def.IsBoss ? 2.5f : 0f;
             e.attackTimer = UnityEngine.Random.Range(0.5f, def.attackCooldown);
@@ -185,6 +186,7 @@ namespace PastaSurvivors
                 e.flash -= dt;
                 e.SetFlash(e.flash > 0f);
                 e.stun -= dt; e.slow -= dt; e.buff -= dt; e.attackTimer -= dt; e.fear -= dt;
+                e.slip -= dt; e.slipCooldown -= dt;
 
                 Vector3 toP = pp - e.pos; toP.y = 0f;
                 float dist = toP.magnitude;
@@ -326,6 +328,20 @@ namespace PastaSurvivors
                 if (o.active && !o.fleeing && !o.IsElite && e.dominoVel.magnitude > 8f) Launch(o, dir * e.dominoVel.magnitude * 0.8f, e.dominoDamage * 0.85f);
                 G.Fx.Burst(o.Center, Models.PastaGold, 5, 4f, 0.2f, FxKind.Crumb);
             }
+        }
+
+        private static readonly string[] SlipShouts = { "Maionese?!", "Scivolo!", "Sulla pizza no!", "Mamma mia!" };
+
+        /// <summary>Mayonnaise underfoot: the Italian skids, lands on their back and lies there for a moment.</summary>
+        public void Slip(Enemy e)
+        {
+            if (!e.active || e.IsBoss || e.IsProp || e.fleeing || e.slipCooldown > 0f) return;
+            e.InterruptApproachGesture();
+            e.slip = Enemy.SlipTime;
+            e.slipCooldown = Enemy.SlipTime + 0.8f;
+            e.stun = Mathf.Max(e.stun, Enemy.SlipTime);
+            e.knock += e.facing * 3f;
+            if (UnityEngine.Random.value < 0.5f) ShoutCustom(e, SlipShouts[UnityEngine.Random.Range(0, SlipShouts.Length)], new Color(1f, 0.95f, 0.7f));
         }
 
         public void Launch(Enemy e, Vector3 velocity, float damage)

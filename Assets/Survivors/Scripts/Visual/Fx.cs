@@ -28,10 +28,11 @@ namespace PastaSurvivors
         private readonly Dictionary<string, Mesh> meshes = new Dictionary<string, Mesh>();
         private MaterialPropertyBlock mpb;
         private Transform root;
-        private GameObject aura, reticle, beamOuter, beamCore;
+        private GameObject aura, reticle, beamBody, beamCore;
+        private readonly List<Transform> beamCream = new List<Transform>(), beamCaramel = new List<Transform>();
         private MaterialPropertyBlock beamBlock;
         private MeshRenderer auraRenderer;
-        private float pokiCooldown;
+        private float pokiCooldown, auraFlash;
 
         public void Init()
         {
@@ -42,7 +43,7 @@ namespace PastaSurvivors
             crumbs = MakeSystem("Crumbs", new Material(Mats.Lit), crumbMesh, 2.2f);
             puffs = MakeSystem("Puffs", Mats.Particles(false), null, -0.1f);
             sparks = MakeSystem("Sparks", Mats.Particles(true), null, 0f);
-            aura = Models.Static(Mesh("disc"), root, "Aura", Mats.FxAlpha, false);
+            aura = Models.Static(CreamDisc(), root, "Aura", Mats.FxAlpha, false);
             auraRenderer = aura.GetComponent<MeshRenderer>();
             aura.SetActive(false);
             reticle = Models.Static(MeshKit.Sector(0.55f, 0.75f, 360f, 32, "Reticle"), root, "Reticle", Mats.FxAdd, false);
@@ -50,12 +51,14 @@ namespace PastaSurvivors
             rb.SetColor("_BaseColor", new Color(1f, 0.9f, 0.5f, 0.9f));
             reticle.GetComponent<MeshRenderer>().SetPropertyBlock(rb);
             reticle.SetActive(false);
-            // Sta○ Beam: a green shell around a white core, stretched along Z.
+            // Frappé Beam: a blended coffee body around an icy core, stretched along Z, wrapped in a turning spiral of
+            // whipped cream and caramel drizzle.
             var beamMesh = new MeshKit().Cyl(new Vector3(0f, 0f, 0.5f), Vector3.one, Color.white, new Vector3(90, 0, 0), 14).ToMesh("Beam");
-            beamOuter = Models.Static(beamMesh, root, "Beam outer", Mats.FxAdd, false);
+            beamBody = Models.Static(beamMesh, root, "Beam body", Mats.FxAlpha, false);
             beamCore = Models.Static(beamMesh, root, "Beam core", Mats.FxAdd, false);
+            beamCore.GetComponent<MeshRenderer>().sortingOrder = 1; // the icy core shows through the coffee body
             beamBlock = new MaterialPropertyBlock();
-            beamOuter.SetActive(false);
+            beamBody.SetActive(false);
             beamCore.SetActive(false);
         }
 
@@ -63,28 +66,60 @@ namespace PastaSurvivors
         {
             if (!on || length <= 0f)
             {
-                beamOuter.SetActive(false);
-                beamCore.SetActive(false);
+                HideBeam();
                 return;
             }
-            beamOuter.SetActive(true);
+            beamBody.SetActive(true);
             beamCore.SetActive(true);
             var rot = Quaternion.LookRotation(dir);
             float t = Time.time;
-            float wobble = 1f + Mathf.Sin(t * 40f) * 0.08f;
-            beamOuter.transform.SetPositionAndRotation(origin, rot);
-            beamOuter.transform.localScale = new Vector3(1.7f * wobble, 1.7f * wobble, length);
+            float wobble = 1f + Mathf.Sin(t * 40f) * 0.06f;
+            beamBody.transform.SetPositionAndRotation(origin, rot);
+            beamBody.transform.localScale = new Vector3(1.25f * wobble, 1.25f * wobble, length);
             beamCore.transform.SetPositionAndRotation(origin, rot);
-            beamCore.transform.localScale = new Vector3(0.6f, 0.6f, length);
-            beamBlock.SetColor("_BaseColor", new Color(0.05f, 0.65f, 0.35f, 0.55f));
-            beamOuter.GetComponent<MeshRenderer>().SetPropertyBlock(beamBlock);
-            beamBlock.SetColor("_BaseColor", new Color(1f, 1f, 0.95f, 0.9f));
+            beamCore.transform.localScale = new Vector3(0.45f, 0.45f, length);
+            beamBlock.SetColor("_BaseColor", new Color(Models.FrappeBlend.r, Models.FrappeBlend.g, Models.FrappeBlend.b, 0.8f));
+            beamBody.GetComponent<MeshRenderer>().SetPropertyBlock(beamBlock);
+            beamBlock.SetColor("_BaseColor", new Color(0.75f, 0.92f, 1f, 0.55f));
             beamCore.GetComponent<MeshRenderer>().SetPropertyBlock(beamBlock);
-            // Whipped cream and coffee spray where the beam lands.
+            // Whole turns of the spiral end to end, all turning together; the last one is squeezed to fit.
+            var spin = rot * Quaternion.Euler(0f, 0f, t * 540f);
+            int turns = Mathf.CeilToInt(length / Models.FrappePitch);
+            for (int i = 0; i < Mathf.Max(turns, Mathf.Max(beamCream.Count, beamCaramel.Count)); i++)
+            {
+                bool show = i < turns;
+                float seg = show ? Mathf.Min(Models.FrappePitch, length - i * Models.FrappePitch) : 0f;
+                PlaceTurn(beamCream, i, true, show, origin + dir * (i * Models.FrappePitch), spin, seg);
+                PlaceTurn(beamCaramel, i, false, show, origin + dir * (i * Models.FrappePitch), spin, seg);
+            }
+            // Ice glinting along the beam; whipped cream, caramel and chocolate chips splattering where it lands.
             var end = origin + dir * length;
-            if (Random.value < 0.6f) Burst(end, new Color(1f, 0.98f, 0.92f, 0.8f), 1, 2f, 0.7f, FxKind.Puff);
-            if (Random.value < 0.6f) Burst(end, new Color(0.45f, 0.28f, 0.15f), 2, 5f, 0.12f, FxKind.Crumb);
-            if (Random.value < 0.35f) Burst(origin + dir * Random.Range(0f, length), new Color(0.6f, 1f, 0.7f, 0.9f), 1, 1f, 0.3f, FxKind.Spark);
+            if (Random.value < 0.8f) Burst(origin + dir * Random.Range(0f, length) + Random.insideUnitSphere * 0.5f, new Color(0.8f, 0.95f, 1f, 0.95f), 1, 0.6f, 0.28f, FxKind.Spark);
+            if (Random.value < 0.7f) Burst(end, new Color(1f, 0.98f, 0.94f, 0.85f), 1, 2.5f, 0.9f, FxKind.Puff);
+            if (Random.value < 0.5f) Burst(end, Models.Caramel, 2, 5f, 0.1f, FxKind.Crumb);
+            if (Random.value < 0.5f) Burst(end, new Color(0.3f, 0.18f, 0.1f), 2, 5f, 0.1f, FxKind.Crumb);
+        }
+
+        private void PlaceTurn(List<Transform> turns, int i, bool cream, bool show, Vector3 pos, Quaternion rot, float length)
+        {
+            if (i >= turns.Count)
+            {
+                if (!show) return;
+                turns.Add(Models.Static(Models.FrappeTurn(cream), root, cream ? "Beam cream" : "Beam caramel", Mats.Lit, false).transform);
+            }
+            var tr = turns[i];
+            if (tr.gameObject.activeSelf != show) tr.gameObject.SetActive(show);
+            if (!show) return;
+            tr.SetPositionAndRotation(pos, rot);
+            tr.localScale = new Vector3(1f, 1f, length / Models.FrappePitch);
+        }
+
+        private void HideBeam()
+        {
+            beamBody.SetActive(false);
+            beamCore.SetActive(false);
+            foreach (var tr in beamCream) tr.gameObject.SetActive(false);
+            foreach (var tr in beamCaramel) tr.gameObject.SetActive(false);
         }
 
         /// <summary>Ground marker under the mouse cursor in the top-down view.</summary>
@@ -166,11 +201,40 @@ namespace PastaSurvivors
             active.Clear();
             aura.SetActive(false);
             reticle.SetActive(false);
-            beamOuter.SetActive(false);
-            beamCore.SetActive(false);
+            HideBeam();
         }
 
         // ---------------- flat shapes ----------------
+
+        /// <summary>Carbonara sauce: a creamy disc with swirling streaks and a thick rim that marks its reach.</summary>
+        private static Mesh CreamDisc()
+        {
+            const int segments = 64;
+            float[] radii = { 0f, 0.15f, 0.3f, 0.45f, 0.6f, 0.72f, 0.82f, 0.88f, 0.94f, 0.97f, 1f };
+            var v = new List<Vector3>(); var c = new List<Color>(); var uv = new List<Vector2>(); var n = new List<Vector3>(); var t = new List<int>();
+            foreach (float k in radii)
+                for (int s = 0; s <= segments; s++)
+                {
+                    float a = s * Mathf.PI * 2f / segments;
+                    v.Add(new Vector3(Mathf.Cos(a) * k, 0f, Mathf.Sin(a) * k));
+                    float swirl = 0.5f + 0.5f * Mathf.Sin(a * 3f + k * 9f);
+                    float alpha = k >= 0.999f ? 0.3f : k >= 0.88f ? 0.95f : 0.15f + 0.3f * swirl * k;
+                    c.Add(new Color(1f, 1f, 1f, alpha));
+                    uv.Add(new Vector2(0.5f, 0.5f));
+                    n.Add(Vector3.up);
+                }
+            for (int r = 0; r < radii.Length - 1; r++)
+                for (int s = 0; s < segments; s++)
+                {
+                    int a = r * (segments + 1) + s, b = a + segments + 1;
+                    t.Add(a); t.Add(b); t.Add(b + 1);
+                    t.Add(a); t.Add(b + 1); t.Add(a + 1);
+                }
+            var mesh = new Mesh { name = "Cream disc" };
+            mesh.SetVertices(v); mesh.SetColors(c); mesh.SetUVs(0, uv); mesh.SetNormals(n); mesh.SetTriangles(t, 0);
+            mesh.RecalculateBounds();
+            return mesh;
+        }
 
         private Mesh Mesh(string key)
         {
@@ -308,11 +372,30 @@ namespace PastaSurvivors
         {
             if (radius <= 0f) { aura.SetActive(false); return; }
             if (!aura.activeSelf) aura.SetActive(true);
-            float pulse = 1f + Mathf.Sin(Time.time * 5f) * 0.03f;
+            auraFlash = Mathf.Max(0f, auraFlash - Time.deltaTime * 4f);
+            float pulse = 1f + Mathf.Sin(Time.time * 5f) * 0.02f + auraFlash * 0.05f;
             aura.transform.SetPositionAndRotation(G.Arena.OnGround(pos) + Vector3.up * 0.05f, Quaternion.Euler(0, Time.time * 30f, 0));
             aura.transform.localScale = new Vector3(radius * pulse, 1f, radius * pulse);
-            mpb.SetColor("_BaseColor", evolved ? new Color(1f, 0.92f, 0.55f, 0.32f) : new Color(1f, 0.97f, 0.85f, 0.22f));
+            var c = evolved ? new Color(1f, 0.88f, 0.5f, 0.5f) : new Color(1f, 0.96f, 0.84f, 0.42f);
+            c.a = Mathf.Min(1f, c.a + auraFlash * 0.4f);
+            mpb.SetColor("_BaseColor", c);
             auraRenderer.SetPropertyBlock(mpb);
+        }
+
+        /// <summary>
+        /// One Carbonara hit: the sauce flashes, a wave of cream rolls out to the rim, and every Italian in reach gets
+        /// splattered with cream and bits of guanciale.
+        /// </summary>
+        public void CreamWave(Vector3 pos, float radius, IReadOnlyList<Enemy> hit, int count, bool evolved)
+        {
+            auraFlash = 1f;
+            Ring(G.Arena.OnGround(pos) + Vector3.up * 0.09f, radius, evolved ? new Color(1f, 0.85f, 0.45f, 0.9f) : new Color(1f, 0.95f, 0.82f, 0.85f), 0.35f, radius * 0.2f);
+            for (int i = 0; i < count && i < 14; i++)
+            {
+                var e = hit[i];
+                Burst(e.Center + Vector3.up * 0.3f, new Color(1f, 0.97f, 0.88f), 3, 3f, 0.13f, FxKind.Crumb);
+                if (i % 3 == 0) Burst(e.Center + Vector3.up * 0.3f, new Color(0.72f, 0.34f, 0.26f), 1, 3f, 0.1f, FxKind.Crumb);
+            }
         }
 
         private void Update()

@@ -247,16 +247,17 @@ namespace PastaSurvivors
                 G.Player.transform.position = new Vector3(-14f + (int)id * 7f, 0f, -14f);
                 Controls.TestMouseWorld = G.Player.Position + new Vector3(0f, 0f, -9f);
                 G.Pickups.SpawnSpecial(id, G.Player.Position + new Vector3(0.5f, 0f, 0f));
-                Enemy victim = id == SpecialId.StarBeam ? G.Enemies.Spawn(EnemyKind.Signore, G.Player.Position + new Vector3(0f, 0f, -6f), 50f) : null;
+                Enemy victim = id == SpecialId.FrappeBeam ? G.Enemies.Spawn(EnemyKind.Signore, G.Player.Position + new Vector3(0f, 0f, -6f), 50f) : null;
                 yield return Real(0.6f); // a freshly picked-up special arms after 0.4 s
                 bool got = G.Player.Special.HasValue && G.Player.Special.Value == id;
                 Controls.TestSpecial = true;
                 yield return Real(0.25f);
                 Check(got && G.Player.SpecialCd > 0f, "Special weapon picked up and used: " + GameData.Special(id).name);
+                if (id == SpecialId.MayoJet) Check(G.Shots.Active.Exists(s => s.active && s.slippery), "Mayo Jet leaves a slippery trail");
                 if (victim != null)
                 {
                     yield return Real(0.4f);
-                    Check(victim.fear > 0f || !victim.active || victim.fleeing, "Sta○ Beam scares the Italians it hits");
+                    Check(victim.fear > 0f || !victim.active || victim.fleeing, "Frappé Beam scares the Italians it hits");
                     yield return Shot("05c-special-" + id);
                     yield return Real(2.5f);
                     continue;

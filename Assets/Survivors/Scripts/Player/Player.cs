@@ -63,11 +63,11 @@ namespace PastaSurvivors
         /// <summary>Sugar espresso halves every weapon's cooldown while active.</summary>
         public float BuffCdMul => BuffTime > 0f ? 0.5f : 1f;
         public const int SpecialSlot = 11;
-        private float knifeTime, healFx, beamTime, beamTick, beamSfx;
-        private Vector3 beamDir = Vector3.forward;
+        private float jetTime, healFx, beamTime, beamTick, beamSfx;
+        private Vector3 beamDir = Vector3.forward, mayoDrop;
         public bool Beaming => beamTime > 0f;
-        private static readonly string[] BeamShouts = { "Dov'è l'espresso?!", "Che schifo!", "Caffè americano?!", "Nooo, il frappé!", "Vergogna!" };
-        private readonly List<Enemy> knifeHits = new List<Enemy>(64);
+        private static readonly string[] BeamShouts = { "Troppo dolce!", "Che freddo!", "Panna montata?!", "Dov'è l'espresso?!", "Vergogna!" };
+        private readonly List<Enemy> specialHits = new List<Enemy>(64);
 
         /// <summary>Horizontal direction the main weapon fires in.</summary>
         public Vector3 AimDir
@@ -142,7 +142,7 @@ namespace PastaSurvivors
             Xp = 0f;
             RunCoins = 0;
             invuln = dashCd = dashTime = 0f;
-            knifeTime = 0f;
+            jetTime = 0f;
             beamTime = 0f;
             BuffTime = 0f;
             Special = null;
@@ -268,17 +268,22 @@ namespace PastaSurvivors
             if (dashTime > 0f)
             {
                 dashTime -= dt;
-                target = dashDir * (knifeTime > 0f ? 30f : 21f);
-                if (knifeTime > 0f) KnifeSweep();
+                target = dashDir * (jetTime > 0f ? 27f : 21f);
+                if (jetTime > 0f) TickMayoJet();
                 Velocity = target;
                 if (Random.value < 0.5f) G.Fx.Burst(Position + Vector3.up * 0.2f, new Color(1f, 1f, 1f, 0.35f), 1, 0.5f, 0.6f, FxKind.Puff);
             }
             else Velocity = Vector3.MoveTowards(Velocity, target, dt * 70f);
 
-            knifeTime -= dt;
+            if (jetTime > 0f)
+            {
+                jetTime -= dt;
+                if (jetTime <= 0f) Anim.SetJetting(false);
+            }
             if (beamTime > 0f) TickBeam(dt);
             if (beamTime > 0f && !FirstPerson) Facing = beamDir;
-            else if (FirstPerson || (HasAim && knifeTime <= 0f)) Facing = AimDir;
+            else if (jetTime > 0f && !FirstPerson) Facing = dashDir;
+            else if (FirstPerson || HasAim) Facing = AimDir;
             else if (dir.sqrMagnitude > 0.01f) Facing = Vector3.Slerp(Facing, dir.normalized, 1f - Mathf.Exp(-18f * dt)).normalized;
 
             var next = transform.position + Velocity * dt;
@@ -373,13 +378,14 @@ namespace PastaSurvivors
                         G.Cam.Kick(3f);
                         break;
                     }
-                case SpecialId.KnifeDash:
+                case SpecialId.MayoJet:
                     dashDir = dir;
-                    dashTime = 0.3f;
-                    knifeTime = 0.3f;
-                    knifeHits.Clear();
-                    G.Sfx.Play(SfxId.Whoosh, 0.9f, 1.8f);
-                    G.Sfx.Play(SfxId.Snap, 0.6f, 1.4f);
+                    dashTime = jetTime = 0.4f;
+                    DropMayo();
+                    Anim.SetJetting(true);
+                    G.Sfx.Play(SfxId.Splat, 0.9f, 0.7f);
+                    G.Sfx.Play(SfxId.Whoosh, 0.9f, 1.5f);
+                    G.Fx.Shout(Position + Vector3.up * 2.6f, "マヨ噴射!!", new Color(1f, 0.95f, 0.7f));
                     break;
                 case SpecialId.Parmesan:
                     {
@@ -404,13 +410,13 @@ namespace PastaSurvivors
                     G.Shots.Turret(Position + Facing * 1.2f, 8f * DurationMul, 9f * Might, SpecialSlot);
                     G.Sfx.Play(SfxId.Splat, 0.7f, 0.8f);
                     break;
-                case SpecialId.StarBeam:
+                case SpecialId.FrappeBeam:
                     beamTime = 2.6f * DurationMul;
                     beamDir = dir;
                     beamTick = 0f;
                     beamSfx = 0f;
                     Anim.SetBeaming(true);
-                    G.Fx.Shout(Position + Vector3.up * 2.6f, "スタ〇ビーム!!", new Color(0.4f, 1f, 0.6f));
+                    G.Fx.Shout(Position + Vector3.up * 2.6f, "フラペビーム!!", new Color(1f, 0.88f, 0.7f));
                     G.Cam.Shake(0.25f);
                     break;
                 case SpecialId.SugarEspresso:
@@ -422,7 +428,7 @@ namespace PastaSurvivors
             }
         }
 
-        /// <summary>Sta○ Beam: a sweeping beam that stops at cover, damages and scares everything it touches.</summary>
+        /// <summary>Frappé Beam: a sweeping beam that stops at cover, damages and scares everything it touches.</summary>
         private void TickBeam(float dt)
         {
             beamTime -= dt;
@@ -447,16 +453,23 @@ namespace PastaSurvivors
                 float now = Time.time;
                 for (float d = 0.6f; d <= length; d += 1.2f)
                 {
-                    int n = G.Enemies.Query(origin + beamDir * d, 1.1f, knifeHits);
+                    int n = G.Enemies.Query(origin + beamDir * d, 1.1f, specialHits);
                     for (int i = 0; i < n; i++)
                     {
-                        var e = knifeHits[i];
+                        var e = specialHits[i];
                         if (e.immune[SpecialSlot] > now) continue;
                         e.immune[SpecialSlot] = now + 0.11f;
                         G.Enemies.Damage(e, 12f * Might, beamDir, 1.5f, SpecialSlot);
                         if (!e.IsBoss && e.active && !e.fleeing)
                         {
-                            if (e.fear <= 0f) G.Enemies.ShoutCustom(e, BeamShouts[Random.Range(0, BeamShouts.Length)], new Color(0.7f, 1f, 0.75f));
+                            if (e.fear <= 0f)
+                            {
+                                // Brain freeze: a frosty sparkle, and either "キーン!!" or a complaint about the sugar.
+                                bool freeze = Random.value < 0.5f;
+                                G.Enemies.ShoutCustom(e, freeze ? "キーン!!" : BeamShouts[Random.Range(0, BeamShouts.Length)],
+                                    freeze ? new Color(0.65f, 0.9f, 1f) : new Color(1f, 0.9f, 0.75f));
+                                G.Fx.Burst(e.Center + Vector3.up * 0.6f, new Color(0.8f, 0.95f, 1f, 0.9f), 4, 2f, 0.25f, FxKind.Spark);
+                            }
                             e.fear = Mathf.Max(e.fear, 2f);
                         }
                     }
@@ -469,21 +482,34 @@ namespace PastaSurvivors
             }
         }
 
-        private void KnifeSweep()
+        /// <summary>Mayo Jet: rams Italians off their feet and lays a slippery stripe of mayonnaise behind.</summary>
+        private void TickMayoJet()
         {
-            int n = G.Enemies.Query(Position, 1.7f, knifeHits);
+            int n = G.Enemies.Query(Position, 1.6f, specialHits);
             float now = Time.time;
+            var side = Vector3.Cross(Vector3.up, dashDir);
             for (int i = 0; i < n; i++)
             {
-                var e = knifeHits[i];
+                var e = specialHits[i];
                 if (e.immune[SpecialSlot] > now) continue;
                 e.immune[SpecialSlot] = now + 0.5f;
-                var side = Vector3.Cross(Vector3.up, dashDir);
                 var push = side * Mathf.Sign(Vector3.Dot(e.pos - Position, side) + 0.001f);
-                G.Enemies.Damage(e, 45f * Might, push, 5f, SpecialSlot);
-                G.Fx.Burst(e.Center, new Color(1f, 1f, 1f, 0.9f), 4, 5f, 0.15f, FxKind.Spark);
+                G.Enemies.Damage(e, 40f * Might, push, 5f, SpecialSlot);
+                G.Enemies.Slip(e);
+                G.Fx.Burst(e.Center, Models.Mayo, 5, 4f, 0.14f, FxKind.Crumb);
             }
-            if (Random.value < 0.8f) G.Fx.Burst(Position + Vector3.up * 1f, new Color(0.85f, 0.9f, 1f, 0.8f), 2, 0.5f, 0.5f, FxKind.Spark);
+            // Squirting backwards: a creamy jet behind and drops flying off it.
+            var nozzle = Position + Vector3.up - dashDir * 0.8f;
+            G.Fx.Burst(nozzle - dashDir * 0.4f, new Color(1f, 0.97f, 0.86f, 0.85f), 2, 1.2f, 1f, FxKind.Puff);
+            if (Random.value < 0.7f) G.Fx.Burst(nozzle, Models.Mayo, 2, 5f, 0.13f, FxKind.Crumb);
+            if ((Position - mayoDrop).sqrMagnitude > 1.4f * 1.4f) DropMayo();
+        }
+
+        private void DropMayo()
+        {
+            mayoDrop = Position;
+            var zone = G.Shots.Zone(Position, 1.25f * AreaMul, 4f * Might, 5f * DurationMul, 0.3f, SpecialSlot, new Color(1f, 0.94f, 0.7f, 0.9f), 0f);
+            zone.slippery = true;
         }
 
         /// <summary>Damage taken per source, for balance telemetry.</summary>
