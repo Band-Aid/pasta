@@ -575,11 +575,11 @@ namespace PastaSurvivors
 
         private static Arena Roma(Transform root)
         {
-            arena = new Arena(new Vector2(-80, -72), new Vector2(80, 72));
+            arena = new Arena(new Vector2(-160, -144), new Vector2(160, 144));
             arena.spawn = new Vector3(0f, 0f, -3f);
             // A connected loop around the piazza: each district offers a different way to handle a pursuing horde.
             // These weights only affect the enemy kinds available in the current time-based wave.
-            arena.AddDistrict(new Rect(-80, -45, 160, 14), "南の車道", "車を避けながら敵を車道へ誘導", new Color(0.85f, 0.48f, 0.24f), 1.05f, 0.95f,
+            arena.AddDistrict(new Rect(-160, -45, 320, 14), "南の車道", "車を避けながら敵を車道へ誘導", new Color(0.85f, 0.48f, 0.24f), 1.05f, 0.95f,
                 (EnemyKind.Vespista, 3f), (EnemyKind.Tifoso, 1.4f));
             arena.AddDistrict(new Rect(-74, 18, 54, 48), "トラステヴェレの路地", "家の陰で投擲を避け、通路で迎撃", new Color(0.78f, 0.62f, 0.4f), 0.9f, 1.15f,
                 (EnemyKind.Mamma, 3f), (EnemyKind.Chef, 1.6f), (EnemyKind.Vespista, 0.4f));
@@ -612,8 +612,8 @@ namespace PastaSurvivors
             HealArea(new Vector3(-48f, 0f, -59f), 5.2f, "トレヴィの泉");
 
             // South: the traffic road. Cars flatten everything on it — lure the horde across.
-            Road(new Vector3(-80f, 0f, -38f), new Vector3(80f, 0f, -38f), 8f);
-            foreach (float x in new[] { -48f, 48f })
+            Road(new Vector3(-160f, 0f, -38f), new Vector3(160f, 0f, -38f), 8f);
+            foreach (float x in new[] { -120f, -48f, 48f, 120f })
                 for (int i = 0; i < 7; i++)
                     kit.Box(new Vector3(x, 0.07f, -38f + (i - 3) * 8f / 7f), new Vector3(3f, 0.02f, 8f / 14f), Color.white);
 
@@ -683,18 +683,21 @@ namespace PastaSurvivors
             for (int i = 0; i < 3; i++) kit.Box(new Vector3(0f, 0.12f + i * 0.12f, 68.5f + i * 0.8f), new Vector3(16f - i * 2f, 0.24f + i * 0.24f, 1.6f), Stone);
             Pedestal(new Vector3(0f, 0f, 60f));
 
+            Flush(root, "Inner Roma districts");
+            RomaOuterDistricts(root);
+
             Color[] facades = { new Color(0.88f, 0.62f, 0.32f), new Color(0.82f, 0.45f, 0.3f), new Color(0.92f, 0.78f, 0.5f), new Color(0.86f, 0.56f, 0.5f), new Color(0.95f, 0.86f, 0.66f) };
             Color[] shutters = { new Color(0.22f, 0.4f, 0.25f), new Color(0.45f, 0.28f, 0.18f), new Color(0.3f, 0.45f, 0.35f) };
             Flush(root, "Districts");
-            Row(new Vector3(-90, 0, 73), Vector3.right, Vector3.back, 180, 8, new Vector2(10, 15), facades, shutters, 0);
-            Row(new Vector3(81, 0, 73), Vector3.back, Vector3.left, 146, 8, new Vector2(9, 13), facades, shutters, 0);
-            Row(new Vector3(-81, 0, -73), Vector3.forward, Vector3.right, 146, 8, new Vector2(9, 13), facades, shutters, 0);
-            Row(new Vector3(-95, 0, -88), Vector3.right, Vector3.forward, 190, 8, new Vector2(10, 14), facades, shutters, 0);
+            Row(new Vector3(-174, 0, 145), Vector3.right, Vector3.back, 348, 8, new Vector2(10, 15), facades, shutters, 0);
+            Row(new Vector3(161, 0, 145), Vector3.back, Vector3.left, 290, 8, new Vector2(9, 13), facades, shutters, 0);
+            Row(new Vector3(-161, 0, -145), Vector3.forward, Vector3.right, 290, 8, new Vector2(9, 13), facades, shutters, 0);
+            Row(new Vector3(-174, 0, -160), Vector3.right, Vector3.forward, 348, 8, new Vector2(10, 14), facades, shutters, 0);
             Flush(root, "Buildings");
-            for (float x = -80; x <= 80; x += 1.2f) kit.Cyl(new Vector3(x, 0.45f, -73.5f), new Vector3(0.3f, 0.9f, 0.3f), Stone, default, 8);
-            kit.Box(new Vector3(0, 0.95f, -73.5f), new Vector3(161f, 0.15f, 0.5f), Stone);
-            kit.Box(new Vector3(0, 0.05f, -73.5f), new Vector3(161f, 0.15f, 0.6f), Stone);
-            Colosseum(new Vector3(10, 0, 130), 38f);
+            for (float x = -160; x <= 160; x += 1.2f) kit.Cyl(new Vector3(x, 0.45f, -145.5f), new Vector3(0.3f, 0.9f, 0.3f), Stone, default, 8);
+            kit.Box(new Vector3(0, 0.95f, -145.5f), new Vector3(321f, 0.15f, 0.5f), Stone);
+            kit.Box(new Vector3(0, 0.05f, -145.5f), new Vector3(321f, 0.15f, 0.6f), Stone);
+            Colosseum(new Vector3(10, 0, 205), 38f);
             Flush(root, "Backdrop");
 
             Bunting(new Vector3(-30, 9, 66), new Vector3(-10, 9.5f, 66), 12);
@@ -712,6 +715,164 @@ namespace PastaSurvivors
             for (int x = -72; x <= 72; x += 18) { Lamp(new Vector3(x, 0, -32f)); Lamp(new Vector3(x + 5f, 0, -44f)); }
             Flush(root, "Props");
             return arena;
+        }
+
+        /// <summary>Eight outer destinations, joined by broad promenades around the original neighbourhoods.</summary>
+        private static void RomaOuterDistricts(Transform root)
+        {
+            arena.AddDistrict(new Rect(-150, 82, 66, 54), "ピンチョの別荘庭園", "木陰を回り込み、井戸で立て直そう", new Color(0.46f, 0.68f, 0.46f), 0.65f, 1.6f,
+                (EnemyKind.Mamma, 0.5f), (EnemyKind.Vespista, 0.4f));
+            arena.AddDistrict(new Rect(-76, 82, 152, 54), "古代水道橋の回廊", "柱から柱へ移り、投擲をかわそう", new Color(0.64f, 0.67f, 0.7f), 0.95f, 1.1f,
+                (EnemyKind.Mamma, 1.8f), (EnemyKind.Chef, 1.4f));
+            arena.AddDistrict(new Rect(84, 82, 66, 54), "コロッセオ闘技場", "群れをまとめて迎撃、柱の外へ退避", new Color(0.83f, 0.5f, 0.32f), 1.3f, 0.8f,
+                (EnemyKind.Chef, 2f), (EnemyKind.Tifoso, 2f), (EnemyKind.Mamma, 0.5f));
+            arena.AddDistrict(new Rect(-150, -27, 66, 101), "職人の工房街", "作業台と建物で追手を分断しよう", new Color(0.68f, 0.5f, 0.37f), 1.1f, 0.95f,
+                (EnemyKind.Mamma, 2f), (EnemyKind.Chef, 1.8f));
+            arena.AddDistrict(new Rect(84, -27, 66, 101), "ワイン倉庫街", "樽棚を回り込み、補給して迎撃", new Color(0.66f, 0.42f, 0.59f), 1.2f, 0.85f,
+                (EnemyKind.Chef, 2.5f), (EnemyKind.Tifoso, 1.5f), (EnemyKind.Mamma, 0.7f));
+            arena.AddDistrict(new Rect(-150, -136, 66, 89), "テヴェレ川の遊歩道", "橋で追手を絞り、別の橋へ抜けよう", new Color(0.3f, 0.6f, 0.75f), 0.9f, 1.2f,
+                (EnemyKind.Chef, 1.6f), (EnemyKind.Vespista, 0.5f));
+            arena.AddDistrict(new Rect(-76, -136, 152, 60), "チルコ・マッシモ", "中央の長い壁を回り、突進をいなそう", new Color(0.8f, 0.67f, 0.4f), 1.15f, 0.9f,
+                (EnemyKind.Vespista, 2.5f), (EnemyKind.Tifoso, 1.8f));
+            arena.AddDistrict(new Rect(84, -136, 66, 89), "アヴェンティーノの果樹園", "木立を抜け、朝市と井戸で補給", new Color(0.65f, 0.72f, 0.34f), 0.8f, 1.25f,
+                (EnemyKind.Vespista, 1.7f), (EnemyKind.Mamma, 0.8f));
+
+            // A clear inner belt joins every outer district, with north/south links on both sides of the city.
+            foreach (float z in new[] { -74f, 76f })
+            {
+                kit.Box(new Vector3(0f, 0.025f, z), new Vector3(312f, 0.04f, 8f), new Color(0.8f, 0.76f, 0.66f));
+                for (float x = -144f; x <= 144f; x += 24f) Lamp(new Vector3(x, 0f, z + 3f));
+            }
+            foreach (float x in new[] { -79f, 79f })
+                kit.Box(new Vector3(x, 0.025f, 0f), new Vector3(8f, 0.04f, 280f), new Color(0.8f, 0.76f, 0.66f));
+            Flush(root, "Outer promenades", false);
+
+            // North-west villa: a quiet courtyard with a finite healing reservoir and umbrella pines.
+            kit.Box(new Vector3(-116f, 0.02f, 108f), new Vector3(58f, 0.03f, 50f), new Color(0.47f, 0.57f, 0.36f));
+            House(new Vector3(-116f, 0f, 128f), new Vector2(28f, 12f), 4.4f, new Color(0.91f, 0.77f, 0.6f));
+            Fence(new Vector3(-144f, 0f, 112f), new Vector2(0.3f, 26f));
+            Fence(new Vector3(-88f, 0f, 112f), new Vector2(0.3f, 26f));
+            foreach (float x in new[] { -136f, -124f, -108f, -96f })
+                foreach (float z in new[] { 92f, 112f }) RomaTree(new Vector3(x, 0f, z), false);
+            WellHead(new Vector3(-116f, 0f, 106f));
+            HealArea(new Vector3(-116f, 0f, 106f), 5.2f, "別荘の井戸");
+            Pedestal(new Vector3(-116f, 0f, 90f));
+            Flush(root, "Villa garden");
+
+            // Two parallel aqueduct arcades: overhead arches, solid piers, open ground beneath every arch.
+            foreach (float z in new[] { 100f, 122f })
+            {
+                for (float x = -66f; x <= 66f; x += 12f)
+                    StoneWall(new Vector3(x, 0f, z), new Vector2(1.8f, 3.2f), 4.8f);
+                for (float x = -60f; x <= 60f; x += 12f)
+                {
+                    for (int i = 0; i <= 10; i++)
+                    {
+                        float angle = i * Mathf.PI / 10f;
+                        var p = new Vector3(x + Mathf.Cos(angle) * 5.4f, 4.6f + Mathf.Sin(angle) * 2.8f, z);
+                        kit.Box(p, new Vector3(1.7f, 0.85f, 3.2f), Stone, new Vector3(0f, 0f, angle * Mathf.Rad2Deg + 90f));
+                    }
+                    kit.Box(new Vector3(x, 7.85f, z), new Vector3(12f, 0.8f, 3.6f), Stone);
+                }
+            }
+            Pedestal(new Vector3(0f, 0f, 111f));
+            Flush(root, "Aqueduct arcades");
+
+            // Playable amphitheatre: an open ring, perimeter cover and four broad entrances.
+            var centre = new Vector3(116f, 0f, 108f);
+            kit.Cyl(centre + Vector3.up * 0.025f, new Vector3(50f, 0.04f, 50f), new Color(0.8f, 0.68f, 0.48f), default, 48);
+            for (int i = 0; i < 24; i++)
+            {
+                if (i % 6 == 0) continue;
+                var direction = Quaternion.Euler(0f, i * 15f, 0f) * Vector3.forward;
+                var p = centre + direction * 24f;
+                Column(p, 6.5f, 1.1f);
+                if ((i + 1) % 6 != 0)
+                {
+                    var next = centre + Quaternion.Euler(0f, (i + 1) * 15f, 0f) * Vector3.forward * 24f;
+                    kit.Bar(p + Vector3.up * 7.2f, next + Vector3.up * 7.2f, 0.7f, Stone);
+                }
+            }
+            Pedestal(centre);
+            Flush(root, "Playable amphitheatre");
+
+            // West workshops: larger blocks and offset workbenches create a second, wider network of alleys.
+            foreach (float x in new[] { -132f, -106f })
+                foreach (float z in new[] { -10f, 20f, 50f })
+                    House(new Vector3(x, 0f, z), new Vector2(18f, 16f), 4f, new Color(0.77f, 0.55f, 0.38f));
+            StallRow(new Vector3(-119f, 0f, 5f), new Vector2(6f, 2.5f));
+            StallRow(new Vector3(-119f, 0f, 65f), new Vector2(6f, 2.5f));
+            Pedestal(new Vector3(-119f, 0f, 36f));
+            Flush(root, "Workshops");
+
+            // East warehouses: an S-shaped route through real cover, and a contested wine-barrel depot.
+            foreach (float z in new[] { 0f, 40f })
+                House(new Vector3(94f, 0f, z), new Vector2(16f, 20f), 4.5f, new Color(0.7f, 0.45f, 0.35f));
+            House(new Vector3(134f, 0f, 20f), new Vector2(22f, 36f), 4.5f, new Color(0.8f, 0.64f, 0.5f));
+            foreach (var p in new[] { new Vector3(112f, 0f, -8f), new Vector3(110f, 0f, 20f), new Vector3(116f, 0f, 46f) }) RomaWineRack(p);
+            MarketArea(new Vector3(116f, 0f, 22f), 24f, "ワイン倉庫の補給所");
+            Pedestal(new Vector3(115f, 0f, 62f));
+            Flush(root, "Wine warehouses");
+
+            // Tiber: water spans stop at each bridge deck, leaving three genuine bank-to-bank walking routes.
+            Canal(new Vector3(-118f, 0f, -125.75f), new Vector2(10f, 12.5f));
+            Canal(new Vector3(-118f, 0f, -102f), new Vector2(10f, 21f));
+            Canal(new Vector3(-118f, 0f, -74f), new Vector2(10f, 21f));
+            Canal(new Vector3(-118f, 0f, -52.25f), new Vector2(10f, 8.5f));
+            foreach (float z in new[] { -116f, -88f, -60f }) Bridge(new Vector3(-118f, 0f, z), new Vector2(10f, 7f));
+            foreach (float x in new[] { -132f, -104f })
+                foreach (float z in new[] { -124f, -96f, -68f }) Lamp(new Vector3(x, 0f, z));
+            Fence(new Vector3(-140f, 0f, -104f), new Vector2(0.3f, 10f));
+            Pedestal(new Vector3(-140f, 0f, -88f));
+            Flush(root, "Tiber banks and bridges");
+
+            // Circus: a long central spina makes a loop for baiting charges, with a reward on the far side.
+            kit.Cyl(new Vector3(0f, 0.025f, -105f), new Vector3(136f, 0.04f, 54f), new Color(0.78f, 0.69f, 0.5f), default, 48);
+            StoneWall(new Vector3(0f, 0f, -105f), new Vector2(78f, 8f), 1.8f);
+            Obelisk(new Vector3(-22f, 0f, -105f));
+            Obelisk(new Vector3(22f, 0f, -105f));
+            Pedestal(new Vector3(0f, 0f, -127f));
+            Flush(root, "Circus circuit");
+
+            // Orange orchard: staggered hedges and tree trunks break charges; a morning market rewards the detour.
+            kit.Box(new Vector3(117f, 0.02f, -92f), new Vector3(62f, 0.03f, 86f), new Color(0.55f, 0.6f, 0.35f));
+            foreach (float x in new[] { 96f, 112f, 128f, 144f })
+                foreach (float z in new[] { -58f, -80f, -103f }) RomaTree(new Vector3(x, 0f, z), true);
+            Hedge(new Vector3(112f, 0f, -69f), new Vector2(40f, 1.2f));
+            Hedge(new Vector3(126f, 0f, -89f), new Vector2(40f, 1.2f));
+            MarketArea(new Vector3(116f, 0f, -120f), 14f, "果樹園の朝市");
+            foreach (float x in new[] { 104f, 128f }) StallRow(new Vector3(x, 0f, -120f), new Vector2(2f, 12f));
+            WellHead(new Vector3(145f, 0f, -132f));
+            HealArea(new Vector3(145f, 0f, -132f), 4.5f, "果樹園の井戸");
+            Pedestal(new Vector3(116f, 0f, -123f));
+            Flush(root, "Orange orchard and morning market");
+        }
+
+        private static void RomaTree(Vector3 p, bool citrus)
+        {
+            kit.Cyl(p + Vector3.up * 0.25f, new Vector3(1.3f, 0.5f, 1.3f), Stone);
+            float height = citrus ? 2.8f : 4.8f;
+            kit.Cyl(p + Vector3.up * (height * 0.5f), new Vector3(0.5f, height, 0.5f), Wood);
+            kit.Ball(p + Vector3.up * height, citrus ? new Vector3(4f, 3f, 4f) : new Vector3(7f, 2f, 7f), Leaf);
+            if (citrus)
+                for (int i = 0; i < 8; i++)
+                {
+                    var direction = Quaternion.Euler(0f, i * 45f, 0f) * Vector3.forward;
+                    kit.Ball(p + Vector3.up * height + direction * 1.8f, 0.35f, new Color(1f, 0.5f, 0.12f));
+                }
+            arena.AddObstacle(p, 0.7f, true);
+        }
+
+        private static void RomaWineRack(Vector3 c)
+        {
+            for (int x = 0; x < 4; x++)
+                for (int z = 0; z < 2; z++)
+                    for (int y = 0; y < 2; y++)
+                    {
+                        var p = c + new Vector3((x - 1.5f) * 1.3f, 0.6f + y * 1.2f, (z - 0.5f) * 1.8f);
+                        kit.Cyl(p, new Vector3(1.1f, 1.6f, 1.1f), Wood, new Vector3(90f, 0f, 0f), 12);
+                    }
+            arena.AddWall(c, new Vector2(5.2f, 3.6f), true);
         }
 
         private static void Colosseum(Vector3 c, float radius)
