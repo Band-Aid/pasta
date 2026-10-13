@@ -5,7 +5,7 @@ using UnityEngine.Rendering;
 
 namespace PastaSurvivors
 {
-    public enum Motion { Straight, Boomerang, Bounce, Orbit, Lob, Zone, Seek, Turret }
+    public enum Motion { Straight, Boomerang, Bounce, Orbit, Lob, Zone, Seek, Turret, Wheel }
 
     public class Shot
     {
@@ -29,6 +29,8 @@ namespace PastaSurvivors
         /// <summary>Zone of mayonnaise: Italians who step in it slip and fall.</summary>
         public bool slippery;
         public int bounces;
+        public float windup;
+        public HashSet<int> wheelHits;
         public Action<Shot> onEnd;
     }
 
@@ -40,6 +42,7 @@ namespace PastaSurvivors
         private Transform root;
         private MaterialPropertyBlock mpb;
         private static Mesh splatMesh;
+        public const float WheelWindup = 0.6f, WheelSpeed = 32f, WheelRange = 24f;
 
         public void Init()
         {
@@ -72,6 +75,8 @@ namespace PastaSurvivors
             s.slow = 0f;
             s.sticky = false;
             s.slippery = false;
+            s.windup = 0f;
+            s.wheelHits?.Clear();
             s.spin = UnityEngine.Random.value * 360f;
             s.scale = 1f;
             s.go.SetActive(true);
@@ -116,6 +121,26 @@ namespace PastaSurvivors
             s.hostile = true;
             s.spinRate = kind == ShotKind.Meatball ? 0f : 720f;
             s.scale = kind == ShotKind.Meatball ? 1.4f : 1.3f;
+            return s;
+        }
+
+        /// <summary>Spins in front of the player for 0.6 seconds, then rolls along the direction aimed at release.</summary>
+        public Shot Wheel(float damage, float area, int slot)
+        {
+            float radius = 1.25f * Mathf.Sqrt(area);
+            var s = Fire(ShotKind.CheeseWheel, Motion.Wheel, G.Player.Position + Vector3.up * radius,
+                Vector3.zero, damage, radius, WheelWindup + WheelRange / WheelSpeed, slot);
+            s.windup = WheelWindup;
+            s.speed = WheelSpeed;
+            s.scale = radius;
+            s.dir = G.Player.AimDir;
+            s.pos = WheelAnchor(G.Player, s.dir, radius);
+            s.wheelHits ??= new HashSet<int>();
+            s.tickTimer = 0f;
+            s.spin = 0f;
+            Place(s);
+            G.Fx.Ring(G.Player.Position + Vector3.up * 0.08f, radius, new Color(1f, 0.85f, 0.35f, 0.8f), WheelWindup, 0.2f);
+            G.Sfx.Play(SfxId.Whoosh, 0.6f, 0.7f);
             return s;
         }
 
@@ -186,10 +211,14 @@ namespace PastaSurvivors
             for (int i = Active.Count - 1; i >= 0; i--)
             {
                 var s = Active[i];
+                float stepDt = Mathf.Min(dt, Mathf.Max(0f, s.life));
                 s.life -= dt;
                 bool end = s.life <= 0f;
                 switch (s.motion)
                 {
+                    case Motion.Wheel:
+                        if (TickWheel(s, stepDt, player)) end = true;
+                        break;
                     case Motion.Straight:
                         s.pos += s.vel * dt;
                         if (G.Arena.ShotBlocked(s.pos)) { end = true; G.Fx.Burst(s.pos, s.hostile ? new Color(0.9f, 0.85f, 0.8f) : Models.PastaGold, 4, 3f, 0.15f, FxKind.Crumb); }
@@ -301,7 +330,7 @@ namespace PastaSurvivors
                 if (s.motion == Motion.Straight || s.motion == Motion.Seek || s.motion == Motion.Bounce || s.motion == Motion.Boomerang)
                     s.pos.y = G.Arena.GroundHeight(s.pos) + s.heightAboveGround;
 
-                if (s.motion != Motion.Zone && s.motion != Motion.Lob && s.motion != Motion.Turret)
+                if (s.motion != Motion.Zone && s.motion != Motion.Lob && s.motion != Motion.Turret && s.motion != Motion.Wheel)
                 {
                     if (s.hostile)
                     {
@@ -327,6 +356,107 @@ namespace PastaSurvivors
                     Recycle(s);
                     Active.RemoveAt(i);
                 }
+            }
+        }
+
+        private bool TickWheel(Shot s, float dt, Player player)
+        {
+            if (s.windup > 0f)
+            {
+                if (player == null || !player.Alive) return true;
+                s.dir = player.HasAim ? player.AimDir : player.Facing;
+                s.pos = WheelAnchor(player, s.dir, s.radius);
+                float charging = Mathf.Min(dt, s.windup);
+                s.windup = Mathf.Max(0f, s.windup - charging);
+                s.spin += Mathf.Lerp(720f, 2400f, 1f - s.windup / WheelWindup) * charging;
+                dt -= charging;
+                if (s.windup > 0f) return false;
+                // Lock this direction once. Moving the mouse afterwards cannot steer the launched wheel.
+                s.vel = s.dir * s.speed;
+                G.Sfx.Play(SfxId.Whoosh, 0.85f, 1.5f);
+                G.Cam.Kick(1.5f);
+            }
+
+            var before = s.pos;
+            bool stopped = WheelBlocked(before, before, s.radius);
+            bool startedClear = !stopped;
+            float distance = s.speed * dt;
+            int steps = Mathf.Max(1, Mathf.CeilToInt(distance / 0.2f));
+            var step = s.dir * (distance / steps);
+            for (int i = 0; i < steps && !stopped; i++)
+            {
+                var from = s.pos;
+                var next = from + step;
+                if (WheelBlocked(from, next, s.radius))
+                {
+                    // Approach the contact point without ever moving the wheel through thin cover.
+                    float lo = 0f, hi = 1f;
+                    for (int k = 0; k < 6; k++)
+                    {
+                        float mid = (lo + hi) * 0.5f;
+                        if (WheelBlocked(from, Vector3.Lerp(from, next, mid), s.radius)) hi = mid;
+                        else lo = mid;
+                    }
+                    next = Vector3.Lerp(from, next, lo);
+                    stopped = true;
+                }
+                s.pos = G.Arena.OnGround(next) + Vector3.up * s.scale;
+            }
+            if (startedClear) HitWheel(s, before, s.pos);
+            var moved = s.pos - before; moved.y = 0f;
+            s.spin += moved.magnitude / s.scale * Mathf.Rad2Deg;
+            s.tickTimer -= dt;
+            if (s.tickTimer <= 0f)
+            {
+                s.tickTimer = 0.05f;
+                G.Fx.Burst(G.Arena.OnGround(s.pos) + Vector3.up * 0.1f, new Color(1f, 0.9f, 0.65f, 0.65f), 2, 1.5f, 0.5f, FxKind.Puff);
+            }
+            if (stopped)
+            {
+                G.Fx.Burst(s.pos, Models.PastaGold, 12, 6f, 0.2f, FxKind.Crumb);
+                G.Sfx.Play(SfxId.Slam, 0.6f, 1.3f);
+            }
+            return stopped;
+        }
+
+        private static bool WheelBlocked(Vector3 from, Vector3 to, float radius)
+            => !G.Arena.Inside(to, radius) || G.Arena.Blocked(to, radius) || !G.Arena.WalkClear(from, to, radius);
+
+        private static Vector3 WheelAnchor(Player player, Vector3 dir, float radius)
+        {
+            var anchor = player.Position + dir * (radius + 0.3f);
+            // Keep the wheel visible in first person, but never summon it on the far side of cover.
+            if (WheelBlocked(player.Position, anchor, radius)) anchor = player.Position;
+            return G.Arena.OnGround(anchor) + Vector3.up * radius;
+        }
+
+        private void HitWheel(Shot s, Vector3 from, Vector3 to)
+        {
+            var path = to - from; path.y = 0f;
+            float lengthSq = path.sqrMagnitude;
+            // Iterate backwards so smashing a barrel (which removes it immediately) cannot shift an unread target.
+            var enemies = G.Enemies.Active;
+            bool hit = false;
+            for (int i = enemies.Count - 1; i >= 0; i--)
+            {
+                var e = enemies[i];
+                if (!e.active || e.fleeing || s.wheelHits.Contains(e.uid)) continue;
+                var offset = e.pos - from; offset.y = 0f;
+                float t = lengthSq > 0.0001f ? Mathf.Clamp01(Vector3.Dot(offset, path) / lengthSq) : 0f;
+                var nearest = from + path * t;
+                var gap = e.pos - nearest; gap.y = 0f;
+                float reach = s.radius + e.radius;
+                if (gap.sqrMagnitude > reach * reach || !G.Arena.LineOfSight(nearest, e.pos)) continue;
+                s.wheelHits.Add(e.uid); // No fixed limit: a packed crowd is still hit only once per wheel.
+                G.Enemies.Damage(e, s.damage, s.dir, 4f, s.slot);
+                G.Enemies.Flatten(e, s.dir);
+                G.Fx.Burst(e.pos + Vector3.up * 0.2f, Models.PastaGold, 4, 3f, 0.15f, FxKind.Crumb);
+                hit = true;
+            }
+            if (hit)
+            {
+                G.Sfx.Play(SfxId.Splat, 0.55f, 0.7f);
+                G.Cam.Shake(0.12f);
             }
         }
 
@@ -407,6 +537,9 @@ namespace PastaSurvivors
             Quaternion rot;
             switch (s.kind)
             {
+                case ShotKind.CheeseWheel:
+                    rot = Quaternion.LookRotation(s.dir) * Quaternion.Euler(s.spin, 0f, 0f);
+                    break;
                 case ShotKind.Penne:
                 case ShotKind.Bazooka:
                     rot = Quaternion.LookRotation(s.vel.sqrMagnitude > 0.01f ? s.vel : Vector3.forward) * Quaternion.Euler(0, 0, s.spin);
