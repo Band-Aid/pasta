@@ -41,10 +41,10 @@ namespace PastaSurvivors
 
     public enum Behavior { Chase, Thrower, Charger, Sweeper, Elite, Boss, Prop }
     public enum EnemyKind { Signore, Tifoso, Mamma, Chef, Vespista, Gondoliere, Pizzaiolo, Mafioso, Nonna, BossNonna, BossCapitano, BossDon, BossBikeNonna, Barrel }
-    public enum ShotKind { Penne, Fusilli, Farfalle, Ketchup, Pizza, Slipper, Dough, Meatball, Pineapple, Oar, Bazooka, Drop, Parmesan }
+    public enum ShotKind { Penne, Fusilli, Farfalle, Ketchup, Pizza, Slipper, Dough, Meatball, Pineapple, Oar, Bazooka, Drop, Parmesan, CheeseWheel }
 
     /// <summary>Special weapons: picked up on the map, fired manually, then cool down.</summary>
-    public enum SpecialId { Bazooka, MayoJet, Parmesan, Sprinkler, SugarEspresso, FrappeBeam }
+    public enum SpecialId { Bazooka, MayoJet, Parmesan, Sprinkler, SugarEspresso, FrappeBeam, CheeseWheel }
 
     public class SpecialDef
     {
@@ -423,6 +423,8 @@ namespace PastaSurvivors
                     desc = "7秒間、移動速度+40%・全武器のクールダウン半減。" },
                 new SpecialDef { id = SpecialId.FrappeBeam, name = "フラペビーム", icon = "frappe", cooldown = 16f,
                     desc = "巨大フラペから、ホイップとキャラメルが渦巻く氷のビームを照射。甘すぎるコーヒーで頭がキーンとなったイタリア人は逃げ惑う。" },
+                new SpecialDef { id = SpecialId.CheeseWheel, name = "チーズホイール", icon = "cheesewheel", cooldown = 20f,
+                    desc = "巨大チーズが0.6秒スピンして、その瞬間に向いている方向へ猛突進。まとめてイタリア人を漫画のようにペラペラに潰す。壁で止まる。" },
             };
 
             Shop = new[]

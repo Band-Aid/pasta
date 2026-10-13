@@ -80,6 +80,7 @@ namespace PastaSurvivors
             e.knock = Vector3.zero;
             e.stun = e.slow = e.buff = e.flash = e.fear = 0f;
             e.slip = e.slipCooldown = 0f;
+            e.flattened = 0f;
             e.state = 0; e.pattern = -1; e.volleys = 0;
             e.stateTimer = def.IsBoss ? 2.5f : 0f;
             e.attackTimer = UnityEngine.Random.Range(0.5f, def.attackCooldown);
@@ -170,6 +171,7 @@ namespace PastaSurvivors
             for (int i = Active.Count - 1; i >= 0; i--)
             {
                 var e = Active[i];
+                if (!e.frozen) e.flattened = Mathf.Max(0f, e.flattened - dt);
                 if (e.fleeing)
                 {
                     TickFlee(e, dt);
@@ -253,7 +255,7 @@ namespace PastaSurvivors
                 else if (e.state != 2 && dist > 0.1f) e.facing = Vector3.Slerp(e.facing, dirP, 1f - Mathf.Exp(-6f * dt));
 
                 // Contact damage.
-                if (player != null && e.dominoTime <= 0f && dist < e.radius + pr + 0.05f) player.TakeDamage(e.damage, e.pos, (e.state == 2 ? "charge:" : "touch:") + e.def.kind);
+                if (player != null && e.flattened <= 0f && e.dominoTime <= 0f && dist < e.radius + pr + 0.05f) player.TakeDamage(e.damage, e.pos, (e.state == 2 ? "charge:" : "touch:") + e.def.kind);
 
                 // Stragglers get recycled ahead of the player (Vampire Survivors style).
                 if (!e.IsBoss && !e.IsElite && dist > 44f && G.Waves != null)
@@ -276,11 +278,6 @@ namespace PastaSurvivors
             e.facing = e.fleeDir;
             e.lift = Mathf.Abs(Mathf.Sin(e.fleeT * 14f)) * 0.25f;
             float life = e.IsBoss ? 2.2f : 1.0f;
-            if (e.fleeT > life - 0.25f)
-            {
-                float k = Mathf.Clamp01((life - e.fleeT) / 0.25f);
-                e.rig.root.localScale = Vector3.one * e.scale * k;
-            }
             e.ApplyTransform();
             e.Animate(dt, 6f);
             if (e.fleeT >= life)
@@ -335,7 +332,7 @@ namespace PastaSurvivors
         /// <summary>Mayonnaise underfoot: the Italian skids, lands on their back and lies there for a moment.</summary>
         public void Slip(Enemy e)
         {
-            if (!e.active || e.IsBoss || e.IsProp || e.fleeing || e.slipCooldown > 0f) return;
+            if (!e.active || e.IsBoss || e.IsProp || e.fleeing || e.flattened > 0f || e.slipCooldown > 0f) return;
             e.InterruptApproachGesture();
             e.slip = Enemy.SlipTime;
             e.slipCooldown = Enemy.SlipTime + 0.8f;
@@ -344,9 +341,27 @@ namespace PastaSurvivors
             if (UnityEngine.Random.value < 0.5f) ShoutCustom(e, SlipShouts[UnityEngine.Random.Range(0, SlipShouts.Length)], new Color(1f, 0.95f, 0.7f));
         }
 
+        /// <summary>A wheel irons ordinary Italians flat; defeated ones slide away as paper instead of popping upright.</summary>
+        public void Flatten(Enemy e, Vector3 dir)
+        {
+            if (!e.active || e.IsBoss || e.IsProp) return;
+            e.InterruptApproachGesture();
+            e.flattened = Enemy.FlattenTime;
+            e.flattenDir = dir;
+            e.stun = Mathf.Max(e.stun, Enemy.FlattenTime);
+            e.slip = e.fear = e.dominoTime = e.spin = e.lift = 0f;
+            e.dominoVel = Vector3.zero;
+            e.state = 0;
+            e.knock += dir * 8f;
+            if (e.fleeing) e.fleeDir = dir;
+            e.Animate(0.001f, 0f);
+            e.ApplyTransform();
+            ShoutCustom(e, "ぺちゃんこ!!", new Color(1f, 0.9f, 0.5f));
+        }
+
         public void Launch(Enemy e, Vector3 velocity, float damage)
         {
-            if (e.IsBoss || e.IsProp || e.fleeing) return;
+            if (e.IsBoss || e.IsProp || e.fleeing || e.flattened > 0f) return;
             e.InterruptApproachGesture();
             e.dominoVel = velocity;
             e.dominoTime = 0.45f;
@@ -665,6 +680,7 @@ namespace PastaSurvivors
             }
             e.InterruptApproachGesture();
             e.fleeing = true;
+            if (e.flattened > 0f) e.flattened = Enemy.FlattenTime;
             e.fleeT = 0f;
             e.state = 0;
             e.dominoTime = 0f;

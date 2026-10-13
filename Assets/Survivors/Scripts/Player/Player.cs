@@ -365,6 +365,10 @@ namespace PastaSurvivors
             }
             switch (id)
             {
+                case SpecialId.CheeseWheel:
+                    G.Shots.Wheel(100f * Might, AreaMul, SpecialSlot);
+                    Anim.Throw();
+                    break;
                 case SpecialId.Bazooka:
                     {
                         var s = G.Shots.Fire(ShotKind.Bazooka, Motion.Straight, Position + Vector3.up * 1.2f + dir * 0.6f, dir * 22f, 20f * Might, 0.7f, 1.3f, SpecialSlot);
