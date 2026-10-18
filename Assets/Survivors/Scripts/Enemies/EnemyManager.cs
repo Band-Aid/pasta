@@ -677,6 +677,7 @@ namespace PastaSurvivors
             e.fleeDir.y = 0; e.fleeDir.Normalize();
             e.knock = dir.sqrMagnitude > 0.001f ? dir.normalized * 3f : Vector3.zero;
             G.Pickups.DropGem(e.pos, e.def.xp);
+            G.Sfx.PlayEnemyCry(e);
             if (e.IsElite)
             {
                 G.Pickups.Drop(PickupKind.Chest, e.pos + e.fleeDir * -0.5f);
@@ -907,6 +908,7 @@ namespace PastaSurvivors
             if (shoutBudget < 1f) return;
             shoutBudget -= 1f;
             G.Fx.Shout(e.Center + Vector3.up, text, color);
+            G.Sfx.PlayEnemyCry(e);
         }
 
         public void ShoutFrom(Enemy e)
@@ -914,6 +916,7 @@ namespace PastaSurvivors
             if (shoutBudget < 1f) return;
             shoutBudget -= 1f;
             G.Fx.Shout(e.Center + Vector3.up, Shouts[UnityEngine.Random.Range(0, Shouts.Length)], Color.white);
+            G.Sfx.PlayEnemyCry(e);
         }
     }
 }
