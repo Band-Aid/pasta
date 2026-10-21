@@ -135,7 +135,7 @@ namespace PastaSurvivors
                 if (d.magnitude > radius + e.radius) continue;
                 if (d.magnitude > 0.6f && Vector3.Angle(dir, d) > half + 10f) continue;
                 G.Enemies.Damage(e, dmg, dir + d.normalized * 0.4f, s.knockback, Slot);
-                if (IsMain) e.stun = Mathf.Max(e.stun, 0.6f);
+                if (IsMain) G.Enemies.ApplyStun(e, 0.6f);
                 if (evolved && e.active && !e.fleeing) G.Enemies.Launch(e, (dir + d.normalized * 0.3f).normalized * 17f, dmg * 0.7f);
             }
             if (n > 0) G.Cam.Shake(0.08f);
@@ -220,7 +220,7 @@ namespace PastaSurvivors
                 Vector3 d = e.pos - c; d.y = 0;
                 if (d.magnitude + e.radius < inner) continue;
                 G.Enemies.Damage(e, dmg, d, s.knockback * (IsMain ? 2f : 1f), Slot);
-                if (evolved) e.stun = Mathf.Max(e.stun, 0.8f);
+                if (evolved) G.Enemies.ApplyStun(e, 0.8f);
             }
         }
     }
@@ -375,7 +375,7 @@ namespace PastaSurvivors
                 {
                     var e = hits[i];
                     G.Enemies.Damage(e, dmg * 2f, e.pos - x.target, kb, slot);
-                    e.slow = Mathf.Max(e.slow, 1f);
+                    G.Enemies.ApplySlow(e, 1f);
                 }
                 G.Fx.Ring(x.target + Vector3.up * 0.1f, radius, new Color(1f, 0.25f, 0.1f, 0.8f), 0.3f, 0.5f);
                 var zone = G.Shots.Zone(x.target, radius, dmg, dur, 0.35f, slot, new Color(0.85f, 0.08f, 0.05f, 0.6f), 1f);
@@ -434,7 +434,7 @@ namespace PastaSurvivors
             {
                 var e = hits[i];
                 G.Enemies.Damage(e, dmg, e.pos - P.Position, s.knockback, Slot);
-                if (evolved) e.slow = Mathf.Max(e.slow, 0.6f);
+                if (evolved) G.Enemies.ApplySlow(e, 0.6f);
                 if (canHeal && healBudget > 0f)
                 {
                     // Keep healing on every hit (including props), but cap the total exactly.

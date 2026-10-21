@@ -15,6 +15,8 @@ namespace PastaSurvivors
         public Vector3 pos, facing = Vector3.back, knock;
         public float hp, maxHp, damage, speedMul = 1f, radius, scale;
         public float flash, stun, slow, buff;
+        /// <summary>Shared lockout across all combat CC sources: active slow plus recovery time.</summary>
+        public float bossCcCooldown;
         /// <summary>Scared (Frappé Beam): runs away from the player with arms in the air.</summary>
         public float fear;
         /// <summary>Slipped on mayonnaise: time left flat on the back, and until the next slip can happen.</summary>
@@ -79,6 +81,7 @@ namespace PastaSurvivors
         public bool IsElite => def.behavior == Behavior.Elite;
         public bool IsProp => def.behavior == Behavior.Prop;
         public bool Targetable => active && !fleeing && !IsProp;
+        public float CcSpeedMultiplier => slow <= 0f ? 1f : IsBoss ? def.bossCcSpeedMultiplier : 0.55f;
         public float HpFraction => maxHp > 0 ? Mathf.Clamp01(hp / maxHp) : 0f;
         public Vector3 Center => pos + Vector3.up * (0.9f * scale);
 

@@ -79,6 +79,7 @@ namespace PastaSurvivors
             e.speedMul = 1f;
             e.knock = Vector3.zero;
             e.stun = e.slow = e.buff = e.flash = e.fear = 0f;
+            e.bossCcCooldown = 0f;
             e.slip = e.slipCooldown = 0f;
             e.flattened = 0f;
             e.state = 0; e.pattern = -1; e.volleys = 0;
@@ -188,6 +189,7 @@ namespace PastaSurvivors
                 e.flash -= dt;
                 e.SetFlash(e.flash > 0f);
                 e.stun -= dt; e.slow -= dt; e.buff -= dt; e.attackTimer -= dt; e.fear -= dt;
+                e.bossCcCooldown = Mathf.Max(0f, e.bossCcCooldown - dt);
                 e.slip -= dt; e.slipCooldown -= dt;
 
                 Vector3 toP = pp - e.pos; toP.y = 0f;
@@ -207,7 +209,7 @@ namespace PastaSurvivors
                     var flow = G.Arena.FlowDir(e.pos);
                     e.nav = flow.sqrMagnitude > 0.01f ? flow : dirP;
                 }
-                float speed = e.def.speed * e.speedMul * (e.slow > 0f ? 0.55f : 1f) * (e.buff > 0f ? 1.4f : 1f);
+                float speed = e.def.speed * e.speedMul * e.CcSpeedMultiplier * (e.buff > 0f ? 1.4f : 1f);
 
                 if (e.dominoTime > 0f)
                 {
@@ -215,6 +217,8 @@ namespace PastaSurvivors
                 }
                 else if (e.stun > 0f)
                 {
+                    // Combat CC uses ApplyStun: a boss only reaches this branch for
+                    // the one-off, scripted wait when its second form appears.
                     move = Vector3.zero;
                 }
                 else if (e.fear > 0f && !e.IsBoss)
@@ -328,6 +332,29 @@ namespace PastaSurvivors
         }
 
         private static readonly string[] SlipShouts = { "Maionese?!", "Scivolo!", "Sulla pizza no!", "Mamma mia!" };
+
+        /// <summary>Weapon/zone CC enters here; bosses slow down without pausing their attack state machine.</summary>
+        public void ApplyStun(Enemy e, float duration)
+        {
+            if (!e.active || e.fleeing || e.IsProp || duration <= 0f) return;
+            if (e.IsBoss) { ApplySlow(e, duration); return; }
+            e.stun = Mathf.Max(e.stun, duration);
+        }
+
+        public void ApplySlow(Enemy e, float duration)
+        {
+            if (!e.active || e.fleeing || e.IsProp || duration <= 0f) return;
+            if (e.IsBoss)
+            {
+                // All CC sources share the same window. Hits during the slow or its
+                // recovery cannot extend it, stack it or postpone the next attack.
+                if (e.bossCcCooldown > 0f) return;
+                e.slow = Mathf.Min(duration, e.def.bossCcMaxDuration);
+                e.bossCcCooldown = e.slow + e.def.bossCcRecovery;
+                return;
+            }
+            e.slow = Mathf.Max(e.slow, duration);
+        }
 
         /// <summary>Mayonnaise underfoot: the Italian skids, lands on their back and lies there for a moment.</summary>
         public void Slip(Enemy e)
@@ -575,7 +602,7 @@ namespace PastaSurvivors
                     {
                         e.facing = e.lockDir;
                         if (e.stateTimer <= 0f || !G.Arena.Inside(e.pos, e.radius + 0.5f) || G.Arena.Blocked(e.pos + e.lockDir * (e.radius + 0.4f), 0.05f)) { EndBossMove(e, pace); return Vector3.zero; }
-                        return e.lockDir * (enraged ? 16f : 13f);
+                        return e.lockDir * (enraged ? 16f : 13f) * e.CcSpeedMultiplier;
                     }
                     if (move == BossMove.Ride)
                     {
@@ -591,7 +618,7 @@ namespace PastaSurvivors
                             RideTelegraph(e, dirP, e.stateTimer);
                             return Vector3.zero;
                         }
-                        return e.lockDir * (enraged ? 18f : 15f);
+                        return e.lockDir * (enraged ? 18f : 15f) * e.CcSpeedMultiplier;
                     }
                     if (move == BossMove.Fan || move == BossMove.Radial)
                     {
