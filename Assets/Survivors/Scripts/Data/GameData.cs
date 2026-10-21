@@ -61,6 +61,8 @@ namespace PastaSurvivors
         public int xp;
         public Behavior behavior;
         public ShotKind shot;
+        /// <summary>Combat CC becomes a short, non-refreshable slow, followed by full-speed recovery. Bosses only.</summary>
+        public float bossCcSpeedMultiplier = 0.8f, bossCcMaxDuration = 0.35f, bossCcRecovery = 1.25f;
         /// <summary>A boss that comes back as this kind when beaten instead of clearing the stage.</summary>
         public EnemyKind? nextPhase;
         /// <summary>Title-card line and banner shown when this boss arrives as a later phase.</summary>
@@ -283,6 +285,9 @@ namespace PastaSurvivors
             E(EnemyKind.BossNonna, "グランデ・ノンナ", 2200, 2.1f, 22, 200, Behavior.Boss, 1.5f, 2.9f, 1f, 14f, 3.4f, ShotKind.Slipper);
             // Grande Nonna's second form: beaten once, she grows wheels and comes back as a bicycle.
             E(EnemyKind.BossBikeNonna, "バイクばばぁ", 2400, 3.2f, 24, 250, Behavior.Boss, 1.5f, 2.2f, 1f, 14f, 3.0f, ShotKind.Slipper);
+            Enemies[EnemyKind.BossBikeNonna].bossCcSpeedMultiplier = 0.9f;
+            Enemies[EnemyKind.BossBikeNonna].bossCcMaxDuration = 0.2f;
+            Enemies[EnemyKind.BossBikeNonna].bossCcRecovery = 1.6f;
             Enemies[EnemyKind.BossNonna].nextPhase = EnemyKind.BossBikeNonna;
             Enemies[EnemyKind.BossBikeNonna].entranceLine = "“If my grandma had wheels, she would've been a bike.”<size=24>  — Gino D'Acampo</size>";
             Enemies[EnemyKind.BossBikeNonna].entranceBanner = "グランデ・ノンナに車輪が生えた！";

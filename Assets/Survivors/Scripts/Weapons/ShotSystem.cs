@@ -392,8 +392,8 @@ namespace PastaSurvivors
             for (int i = 0; i < n; i++)
             {
                 var e = hits[i];
-                if (s.slow > 0f) e.slow = Mathf.Max(e.slow, s.tickInterval + 0.1f);
-                if (s.sticky && !e.IsBoss) e.stun = Mathf.Max(e.stun, s.tickInterval + 0.05f);
+                if (s.slow > 0f) G.Enemies.ApplySlow(e, s.tickInterval + 0.1f);
+                if (s.sticky) G.Enemies.ApplyStun(e, s.tickInterval + 0.05f);
                 if (s.slippery) G.Enemies.Slip(e);
                 if (e.immune[s.slot] > now) continue;
                 e.immune[s.slot] = now + s.tickInterval * 0.9f;
