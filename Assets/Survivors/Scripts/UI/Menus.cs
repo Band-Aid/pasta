@@ -30,6 +30,10 @@ namespace PastaSurvivors
         private readonly Slider[] audioSliders = new Slider[2];
         private readonly RectTransform[] audioTracks = new RectTransform[2];
         private int draggingAudio = -1;
+        private Slider mouseSensitivitySlider;
+        private RectTransform mouseSensitivityTrack;
+        private bool draggingMouseSensitivity;
+        private int mouseSensitivityIndex = -1;
 
         public void Build(Transform parent)
         {
@@ -45,6 +49,10 @@ namespace PastaSurvivors
             Current = "";
             for (int i = 0; i < audioSliders.Length; i++) { audioSliders[i] = null; audioTracks[i] = null; }
             draggingAudio = -1;
+            mouseSensitivitySlider = null;
+            mouseSensitivityTrack = null;
+            draggingMouseSensitivity = false;
+            mouseSensitivityIndex = -1;
             gestureSlider = null;
             draggingGesture = false;
             closeGestureSettings = null;
@@ -79,6 +87,7 @@ namespace PastaSurvivors
             if (!Open) return;
             if (GestureSettingsOpen) { UpdateGestureSettings(); return; }
             if (AudioSettingsOpen) { UpdateAudioSettings(); return; }
+            if (Current == "pause") UpdateMouseSensitivity();
             Nav.Update();
             float age = Time.unscaledTime - openedAt;
             if (age > 0.45f) return;
@@ -327,8 +336,50 @@ namespace PastaSurvivors
             Button(c, "身振り設定（再開）", new Vector2(0.5f, 0f), new Vector2(0, 110), new Vector2(300, 76), () => G.Game.OpenGestureSettings(), 28);
             Button(c, "音量設定", new Vector2(0.5f, 0f), new Vector2(320, 110), new Vector2(300, 76), () => G.Game.OpenAudioSettings());
             Button(c, "タイトルへ戻る", new Vector2(0.5f, 0f), new Vector2(640, 110), new Vector2(300, 76), quit);
+            AddMouseSensitivitySlider(c);
             Nav.columns = 5;
             Nav.onCancel = resume;
+        }
+
+        private void AddMouseSensitivitySlider(Transform parent)
+        {
+            var row = UiKit.Img(parent, "MouseSensitivity", new Vector2(0.5f, 0f), new Vector2(0, 14),
+                new Vector2(1100, 78), UiKit.Ink);
+            var label = UiKit.Label(row.transform, "Value", "", 28, UiKit.Cream, TextAnchor.MiddleLeft,
+                new Vector2(0f, 0.5f), new Vector2(24, 14), new Vector2(330, 38));
+            UiKit.Label(row.transform, "Hint", "0.03〜0.20 / ←→で調整", 18, UiKit.Cream, TextAnchor.MiddleLeft,
+                new Vector2(0f, 0.5f), new Vector2(24, -20), new Vector2(330, 24), FontStyle.Normal);
+            mouseSensitivityTrack = UiKit.Rect(row.transform, "Slider", new Vector2(1f, 0.5f),
+                new Vector2(-30, 0), new Vector2(650, 44));
+            var slider = UiKit.PercentSlider(mouseSensitivityTrack);
+            // Whole hundredths give precise 0.01 steps for mouse, keyboard and controller.
+            slider.minValue = SaveData.MinMouseSensitivity * 100f;
+            slider.maxValue = SaveData.MaxMouseSensitivity * 100f;
+            slider.SetValueWithoutNotify(SaveData.MouseSensitivity * 100f);
+            label.text = $"マウス感度  {SaveData.MouseSensitivity:0.00}";
+            slider.onValueChanged.AddListener(value =>
+            {
+                SaveData.SaveMouseSensitivity(value / 100f);
+                label.text = $"マウス感度  {SaveData.MouseSensitivity:0.00}";
+            });
+            mouseSensitivitySlider = slider;
+            mouseSensitivityIndex = Nav.items.Count;
+            Nav.Add(row.rectTransform, row, null).adjust = direction => slider.value += direction;
+        }
+
+        private void UpdateMouseSensitivity()
+        {
+            if (mouseSensitivitySlider == null || Time.unscaledTime - openedAt < 0.25f) return;
+            var mouse = Controls.MousePosition;
+            // This UI polls input directly, rather than using an EventSystem.
+            if (Controls.MouseClicked && RectTransformUtility.RectangleContainsScreenPoint(mouseSensitivityTrack, mouse, null))
+                draggingMouseSensitivity = true;
+            if (!Controls.MouseMoveHeld) draggingMouseSensitivity = false;
+            if (!draggingMouseSensitivity) return;
+            Nav.index = mouseSensitivityIndex;
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(mouseSensitivityTrack, mouse, null, out var local))
+                mouseSensitivitySlider.value = Mathf.Lerp(mouseSensitivitySlider.minValue, mouseSensitivitySlider.maxValue,
+                    Mathf.InverseLerp(mouseSensitivityTrack.rect.xMin, mouseSensitivityTrack.rect.xMax, local.x));
         }
 
         public void ShowAudioSettings(System.Action close)
