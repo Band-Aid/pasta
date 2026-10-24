@@ -148,7 +148,7 @@ namespace PastaSurvivors
             if (TestLook.HasValue) return TestLook.Value * Time.unscaledDeltaTime;
             Vector2 v = Vector2.zero;
             float sens = SaveData.Sensitivity;
-            if (Mouse.current != null && Cursor.lockState == CursorLockMode.Locked) v += Mouse.current.delta.ReadValue() * 0.09f * sens;
+            if (Mouse.current != null && Cursor.lockState == CursorLockMode.Locked) v += Mouse.current.delta.ReadValue() * SaveData.MouseSensitivity;
             foreach (var pad in Gamepad.all)
             {
                 var s = pad.rightStick.ReadValue();
@@ -258,7 +258,16 @@ namespace PastaSurvivors
         public static int TotalKills;
         /// <summary>0 = top-down survivors view, 1 = first person.</summary>
         public static int ViewMode;
+        // Keep the existing stick-look multiplier separate from absolute mouse sensitivity.
         public static float Sensitivity = 1f;
+        public const float MinMouseSensitivity = 0.03f, MaxMouseSensitivity = 0.20f, DefaultMouseSensitivity = 0.10f;
+        private static float mouseSensitivity = DefaultMouseSensitivity;
+        public static float MouseSensitivity
+        {
+            get => mouseSensitivity;
+            private set => mouseSensitivity = float.IsNaN(value) ? DefaultMouseSensitivity
+                : Mathf.Clamp(value, MinMouseSensitivity, MaxMouseSensitivity);
+        }
         public const float DefaultMusicVolume = 0.55f, DefaultSfxVolume = 0.4f;
         public static float MusicVolume = DefaultMusicVolume, SfxVolume = DefaultSfxVolume;
         public static bool FirstPerson => ViewMode == 1;
@@ -270,6 +279,7 @@ namespace PastaSurvivors
             TotalKills = PlayerPrefs.GetInt(Prefix + "kills", 0);
             ViewMode = PlayerPrefs.GetInt(Prefix + "view", 0);
             Sensitivity = Mathf.Clamp(PlayerPrefs.GetFloat(Prefix + "sens", 1f), 0.2f, 3f);
+            MouseSensitivity = PlayerPrefs.GetFloat(Prefix + "mouseSensitivity", DefaultMouseSensitivity);
             MusicVolume = Mathf.Clamp01(PlayerPrefs.GetFloat(Prefix + "musicVolume", DefaultMusicVolume));
             SfxVolume = Mathf.Clamp01(PlayerPrefs.GetFloat(Prefix + "sfxVolume", DefaultSfxVolume));
             for (int i = 0; i < Shop.Length; i++) Shop[i] = PlayerPrefs.GetInt(Prefix + "shop" + i, 0);
@@ -287,6 +297,7 @@ namespace PastaSurvivors
             PlayerPrefs.SetInt(Prefix + "kills", TotalKills);
             PlayerPrefs.SetInt(Prefix + "view", ViewMode);
             PlayerPrefs.SetFloat(Prefix + "sens", Sensitivity);
+            PlayerPrefs.SetFloat(Prefix + "mouseSensitivity", MouseSensitivity);
             for (int i = 0; i < Shop.Length; i++) PlayerPrefs.SetInt(Prefix + "shop" + i, Shop[i]);
             for (int i = 0; i < 3; i++)
             {
@@ -294,6 +305,14 @@ namespace PastaSurvivors
                 PlayerPrefs.SetInt(Prefix + "clear" + i, Cleared[i] ? 1 : 0);
             }
             SaveAudio();
+        }
+
+        /// <summary>Persist each slider change without rewriting run progress or relying on a later quit.</summary>
+        public static void SaveMouseSensitivity(float value)
+        {
+            MouseSensitivity = value;
+            PlayerPrefs.SetFloat(Prefix + "mouseSensitivity", MouseSensitivity);
+            PlayerPrefs.Save();
         }
 
         public static void SaveAudio()
@@ -305,7 +324,7 @@ namespace PastaSurvivors
 
         public static void Wipe()
         {
-            foreach (var key in new[] { "coins", "unlocked", "kills", "view", "sens", "musicVolume", "sfxVolume" }) PlayerPrefs.DeleteKey(Prefix + key);
+            foreach (var key in new[] { "coins", "unlocked", "kills", "view", "sens", "mouseSensitivity", "musicVolume", "sfxVolume" }) PlayerPrefs.DeleteKey(Prefix + key);
             for (int i = 0; i < Shop.Length; i++) PlayerPrefs.DeleteKey(Prefix + "shop" + i);
             for (int i = 0; i < 3; i++) { PlayerPrefs.DeleteKey(Prefix + "best" + i); PlayerPrefs.DeleteKey(Prefix + "clear" + i); }
             Load();
