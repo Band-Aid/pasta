@@ -20,6 +20,7 @@ namespace PastaSurvivors
         private class Bomb { public Vector3 pos; public float t; }
 
         public const int Slot = 10;
+        private const float TrafficHeight = 2f;
         private readonly List<Car> cars = new List<Car>();
         private readonly List<Bomb> bombs = new List<Bomb>();
         private readonly List<(float at, int road, bool reverse)> pendingCars = new List<(float, int, bool)>();
@@ -149,7 +150,8 @@ namespace PastaSurvivors
             for (int i = 0; i < n; i++)
             {
                 var e = hits[i];
-                if (e.immune[Slot] > now) continue;
+                // The pedestrian bridge carries both the player and pursuing enemies above the car.
+                if (e.pos.y - pos.y > TrafficHeight || e.immune[Slot] > now) continue;
                 e.immune[Slot] = now + 1f;
                 float sign = Mathf.Sign(Vector3.Dot(e.pos - pos, side) + 0.001f);
                 G.Enemies.Damage(e, e.IsBoss ? 150f : 150f + 40f * G.Enemies.HpMul, dir * 1.5f + side * sign, 14f, Slot);
@@ -157,7 +159,8 @@ namespace PastaSurvivors
             }
             var p = G.Player;
             var d = p.Position - pos; d.y = 0f;
-            if (d.magnitude < 1.5f + p.Radius) p.TakeDamage(18f, pos, "traffic");
+            if (p.Position.y - pos.y <= TrafficHeight && d.magnitude < 1.5f + p.Radius)
+                p.TakeDamage(18f, pos, "traffic");
         }
 
         private void Blast(Vector3 at, float radius)

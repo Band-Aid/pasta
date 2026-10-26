@@ -18,6 +18,8 @@ namespace PastaSurvivors
         private static readonly Color Iron = new Color(0.16f, 0.16f, 0.17f);
         private static readonly Color Leaf = new Color(0.25f, 0.5f, 0.2f);
         private static readonly Color Glass = new Color(0.2f, 0.26f, 0.32f);
+        private static readonly Color ShortcutMark = new Color(0.92f, 0.68f, 0.25f);
+        private static readonly Color DetourMark = new Color(0.3f, 0.68f, 0.6f);
 
         private static float R(float a, float b) => a + (float)rng.NextDouble() * (b - a);
         private static T Pick<T>(T[] arr) => arr[rng.Next(arr.Length)];
@@ -354,7 +356,7 @@ namespace PastaSurvivors
         }
 
         /// <summary>Arched stone bridge with continuous bank approaches and a matching walking surface.</summary>
-        private static void Bridge(Vector3 c, Vector2 size)
+        private static void Bridge(Vector3 c, Vector2 size, bool covered = false, Color? marking = null)
         {
             bool alongX = size.x >= size.y;
             // A 3 m crown with a 0.4 m deck leaves 2.55 m above the water,
@@ -362,15 +364,49 @@ namespace PastaSurvivors
             var footprint = size + (alongX ? new Vector2(8f, 0f) : new Vector2(0f, 8f));
             var surface = arena.AddBridge(c, footprint, 3f);
             CanalSurface(c, alongX ? new Vector2(size.x - 1f, size.y) : new Vector2(size.x, size.y - 1f));
-            kit.Frame = Matrix4x4.TRS(c, Quaternion.Euler(0f, alongX ? 0f : 90f, 0f), Vector3.one);
+            BridgeDeck(surface, covered, marking);
+        }
+
+        private static void BridgeDeck(Arena.BridgeSurface surface, bool covered, Color? marking)
+        {
+            kit.Frame = Matrix4x4.TRS(surface.center, Quaternion.Euler(0f, surface.AlongX ? 0f : 90f, 0f), Vector3.one);
             BridgeStrip(surface, -surface.Width * 0.5f, surface.Width * 0.5f, -0.4f, 0f, new Color(0.86f, 0.82f, 0.74f));
-            BridgeStrip(surface, -surface.Width * 0.5f - 0.15f, -surface.Width * 0.5f + 0.15f, 0f, 0.9f, Stone);
-            BridgeStrip(surface, surface.Width * 0.5f - 0.15f, surface.Width * 0.5f + 0.15f, 0f, 0.9f, Stone);
+            float railHeight = covered ? 1.9f : 0.9f;
+            BridgeStrip(surface, -surface.Width * 0.5f - 0.15f, -surface.Width * 0.5f + 0.15f, 0f, railHeight, Stone);
+            BridgeStrip(surface, surface.Width * 0.5f - 0.15f, surface.Width * 0.5f + 0.15f, 0f, railHeight, Stone);
+            if (marking.HasValue) BridgeStrip(surface, -0.16f, 0.16f, 0.01f, 0.03f, marking.Value);
             kit.Frame = Matrix4x4.identity;
-            var off = alongX ? new Vector3(0f, 0f, size.y * 0.5f) : new Vector3(size.x * 0.5f, 0f, 0f);
-            var railSize = alongX ? new Vector2(footprint.x, 0.3f) : new Vector2(0.3f, footprint.y);
-            arena.AddWall(c + off, railSize, false);
-            arena.AddWall(c - off, railSize, false);
+            var off = surface.AlongX ? new Vector3(0f, 0f, surface.Width * 0.5f) : new Vector3(surface.Width * 0.5f, 0f, 0f);
+            var railSize = surface.AlongX ? new Vector2(surface.Length, 0.3f) : new Vector2(0.3f, surface.Length);
+            arena.AddWall(surface.center + off, railSize, covered);
+            arena.AddWall(surface.center - off, railSize, covered);
+        }
+
+        /// <summary>Ground markings only; collision and shelter come from the actual walls and hedges.</summary>
+        private static void Footpath(bool detour, params Vector2[] points)
+        {
+            for (int i = 1; i < points.Length; i++)
+            {
+                var delta = points[i] - points[i - 1];
+                float length = delta.magnitude;
+                if (length < 0.01f) continue;
+                var mid = (points[i] + points[i - 1]) * 0.5f;
+                kit.Frame = Matrix4x4.TRS(new Vector3(mid.x, 0f, mid.y),
+                    Quaternion.LookRotation(new Vector3(delta.x, 0f, delta.y)), Vector3.one);
+                kit.Box(new Vector3(0f, 0.055f, 0f), new Vector3(4f, 0.02f, length), new Color(0.78f, 0.75f, 0.65f));
+                if (detour)
+                {
+                    foreach (float x in new[] { -1.5f, 1.5f })
+                        kit.Box(new Vector3(x, 0.08f, 0f), new Vector3(0.18f, 0.02f, length), DetourMark);
+                }
+                else
+                    for (float z = -length * 0.5f; z < length * 0.5f; z += 4f)
+                    {
+                        float dash = Mathf.Min(2f, length * 0.5f - z);
+                        kit.Box(new Vector3(0f, 0.08f, z + dash * 0.5f), new Vector3(0.3f, 0.02f, dash), ShortcutMark);
+                    }
+                kit.Frame = Matrix4x4.identity;
+            }
         }
 
         private static void BridgeStrip(Arena.BridgeSurface surface, float near, float far, float bottom, float top, Color color)
@@ -579,7 +615,7 @@ namespace PastaSurvivors
             arena.spawn = new Vector3(0f, 0f, -3f);
             // A connected loop around the piazza: each district offers a different way to handle a pursuing horde.
             // These weights only affect the enemy kinds available in the current time-based wave.
-            arena.AddDistrict(new Rect(-160, -45, 320, 14), "南の車道", "車を避けながら敵を車道へ誘導", new Color(0.85f, 0.48f, 0.24f), 1.05f, 0.95f,
+            arena.AddDistrict(new Rect(-160, -45, 320, 14), "南の車道", "横断は近道。東の緑の歩道橋なら車を回避", new Color(0.85f, 0.48f, 0.24f), 1.05f, 0.95f,
                 (EnemyKind.Vespista, 3f), (EnemyKind.Tifoso, 1.4f));
             arena.AddDistrict(new Rect(-74, 18, 54, 48), "トラステヴェレの路地", "家の陰で投擲を避け、通路で迎撃", new Color(0.78f, 0.62f, 0.4f), 0.9f, 1.15f,
                 (EnemyKind.Mamma, 3f), (EnemyKind.Chef, 1.6f), (EnemyKind.Vespista, 0.4f));
@@ -616,6 +652,15 @@ namespace PastaSurvivors
             foreach (float x in new[] { -120f, -48f, 48f, 120f })
                 for (int i = 0; i < 7; i++)
                     kit.Box(new Vector3(x, 0.07f, -38f + (i - 3) * 8f / 7f), new Vector3(3f, 0.02f, 8f / 14f), Color.white);
+            Footpath(false, new Vector2(48f, -27f), new Vector2(48f, -49f));
+            // A longer approach along the east connector avoids traffic, for enemies as well as the player.
+            // No canal or water collision beneath this deck: the cars continue along the existing road.
+            var footbridge = arena.AddBridge(new Vector3(79f, 0f, -38f), new Vector2(7f, 36f), 3f);
+            BridgeDeck(footbridge, false, DetourMark);
+            Footpath(true, new Vector2(79f, -12f), new Vector2(79f, -20f));
+            Footpath(true, new Vector2(79f, -56f), new Vector2(79f, -66f));
+            arena.AddRouteHint(new Rect(70f, -66f, 18f, 54f), "緑の歩道橋は車を回避。追手も橋を渡ってくる");
+            arena.AddRouteHint(new Rect(36f, -53f, 34f, 27f), "黄の横断は近道。車を避けるなら東の緑の橋へ");
 
             // North-west: narrow alleys between low houses.
             Color[] houses = { new Color(0.88f, 0.62f, 0.32f), new Color(0.82f, 0.45f, 0.3f), new Color(0.92f, 0.78f, 0.5f), new Color(0.86f, 0.56f, 0.5f) };
@@ -712,7 +757,12 @@ namespace PastaSurvivors
             foreach (var c in new[] { new Vector3(-18f, 0, 54f), new Vector3(18f, 0, 54f), new Vector3(-72f, 0, 66f), new Vector3(72f, 0, 66f), new Vector3(-74f, 0, -54f), new Vector3(74f, 0, -54f), new Vector3(22f, 0, -24f), new Vector3(-20f, 0, -24f) })
                 if (Free(c, 0.8f)) Planter(c);
             for (int x = -72; x <= 72; x += 18) Lamp(new Vector3(x, 0, 68));
-            for (int x = -72; x <= 72; x += 18) { Lamp(new Vector3(x, 0, -32f)); Lamp(new Vector3(x + 5f, 0, -44f)); }
+            for (int x = -72; x <= 72; x += 18)
+            {
+                Lamp(new Vector3(x, 0, -32f));
+                // Keep the pedestrian bridge's deck and its approaches clear.
+                if (x + 5f < 74f) Lamp(new Vector3(x + 5f, 0, -44f));
+            }
             Flush(root, "Props");
             return arena;
         }
@@ -722,7 +772,7 @@ namespace PastaSurvivors
         {
             arena.AddDistrict(new Rect(-150, 82, 66, 54), "ピンチョの別荘庭園", "木陰を回り込み、井戸で立て直そう", new Color(0.46f, 0.68f, 0.46f), 0.65f, 1.6f,
                 (EnemyKind.Mamma, 0.5f), (EnemyKind.Vespista, 0.4f));
-            arena.AddDistrict(new Rect(-76, 82, 152, 54), "古代水道橋の回廊", "柱から柱へ移り、投擲をかわそう", new Color(0.64f, 0.67f, 0.7f), 0.95f, 1.1f,
+            arena.AddDistrict(new Rect(-76, 82, 152, 54), "古代水道橋の回廊", "南の黄の道は近道。緑の柱道で射線を切ろう", new Color(0.64f, 0.67f, 0.7f), 0.95f, 1.1f,
                 (EnemyKind.Mamma, 1.8f), (EnemyKind.Chef, 1.4f));
             arena.AddDistrict(new Rect(84, 82, 66, 54), "コロッセオ闘技場", "群れをまとめて迎撃、柱の外へ退避", new Color(0.83f, 0.5f, 0.32f), 1.3f, 0.8f,
                 (EnemyKind.Chef, 2f), (EnemyKind.Tifoso, 2f), (EnemyKind.Mamma, 0.5f));
@@ -730,11 +780,11 @@ namespace PastaSurvivors
                 (EnemyKind.Mamma, 2f), (EnemyKind.Chef, 1.8f));
             arena.AddDistrict(new Rect(84, -27, 66, 101), "ワイン倉庫街", "樽棚を回り込み、補給して迎撃", new Color(0.66f, 0.42f, 0.59f), 1.2f, 0.85f,
                 (EnemyKind.Chef, 2.5f), (EnemyKind.Tifoso, 1.5f), (EnemyKind.Mamma, 0.7f));
-            arena.AddDistrict(new Rect(-150, -136, 66, 89), "テヴェレ川の遊歩道", "橋で追手を絞り、別の橋へ抜けよう", new Color(0.3f, 0.6f, 0.75f), 0.9f, 1.2f,
+            arena.AddDistrict(new Rect(-150, -136, 66, 89), "テヴェレ川の遊歩道", "中央の黄の橋は近道。南北の緑の橋は壁で投擲を防ぐ", new Color(0.3f, 0.6f, 0.75f), 0.9f, 1.2f,
                 (EnemyKind.Chef, 1.6f), (EnemyKind.Vespista, 0.5f));
             arena.AddDistrict(new Rect(-76, -136, 152, 60), "チルコ・マッシモ", "中央の長い壁を回り、突進をいなそう", new Color(0.8f, 0.67f, 0.4f), 1.15f, 0.9f,
                 (EnemyKind.Vespista, 2.5f), (EnemyKind.Tifoso, 1.8f));
-            arena.AddDistrict(new Rect(84, -136, 66, 89), "アヴェンティーノの果樹園", "木立を抜け、朝市と井戸で補給", new Color(0.65f, 0.72f, 0.34f), 0.8f, 1.25f,
+            arena.AddDistrict(new Rect(84, -136, 66, 89), "アヴェンティーノの果樹園", "黄の直線は突進に注意。緑の曲がり道で朝市へ", new Color(0.65f, 0.72f, 0.34f), 0.8f, 1.25f,
                 (EnemyKind.Vespista, 1.7f), (EnemyKind.Mamma, 0.8f));
 
             // A clear inner belt joins every outer district, with north/south links on both sides of the city.
@@ -775,6 +825,16 @@ namespace PastaSurvivors
                     kit.Box(new Vector3(x, 7.85f, z), new Vector3(12f, 0.8f, 3.6f), Stone);
                 }
             }
+            // The open promenade stays straight; the arcade route trades distance for real cover.
+            // Alternating baffles leave wide exits between the two rows of piers.
+            for (int i = 0; i < 6; i++)
+                StoneWall(new Vector3(-54f + i * 24f, 0f, i % 2 == 0 ? 107f : 115f), new Vector2(1.2f, 12f), 1.8f);
+            Footpath(false, new Vector2(-79f, 76f), new Vector2(79f, 76f));
+            Footpath(true, new Vector2(-79f, 76f), new Vector2(-79f, 116f),
+                new Vector2(-54f, 116f), new Vector2(-30f, 106f), new Vector2(-6f, 116f),
+                new Vector2(18f, 106f), new Vector2(42f, 116f), new Vector2(66f, 106f),
+                new Vector2(79f, 106f), new Vector2(79f, 76f));
+            arena.AddRouteHint(new Rect(-88f, 70f, 176f, 58f), "黄の直線は近道。北の緑の柱道は壁で射線を切る");
             Pedestal(new Vector3(0f, 0f, 111f));
             Flush(root, "Aqueduct arcades");
 
@@ -814,12 +874,31 @@ namespace PastaSurvivors
             Pedestal(new Vector3(115f, 0f, 62f));
             Flush(root, "Wine warehouses");
 
-            // Tiber: water spans stop at each bridge deck, leaving three genuine bank-to-bank walking routes.
-            Canal(new Vector3(-118f, 0f, -125.75f), new Vector2(10f, 12.5f));
-            Canal(new Vector3(-118f, 0f, -102f), new Vector2(10f, 21f));
-            Canal(new Vector3(-118f, 0f, -74f), new Vector2(10f, 21f));
-            Canal(new Vector3(-118f, 0f, -52.25f), new Vector2(10f, 8.5f));
-            foreach (float z in new[] { -116f, -88f, -60f }) Bridge(new Vector3(-118f, 0f, z), new Vector2(10f, 7f));
+            // The narrow, exposed middle bridge leads directly to the west-bank pedestal.
+            // The wider outer bridges have tall shot-blocking parapets and sheltered bank landings.
+            float waterStart = -132f;
+            foreach (float z in new[] { -116f, -88f, -60f })
+            {
+                bool covered = z != -88f;
+                float width = covered ? 9f : 5f;
+                float near = z - width * 0.5f;
+                Canal(new Vector3(-118f, 0f, (waterStart + near) * 0.5f), new Vector2(10f, near - waterStart));
+                Bridge(new Vector3(-118f, 0f, z), new Vector2(10f, width), covered, covered ? DetourMark : ShortcutMark);
+                waterStart = z + width * 0.5f;
+                if (covered)
+                {
+                    foreach (float x in new[] { -134f, -102f })
+                        kit.Box(new Vector3(x, 0.025f, z), new Vector3(14f, 0.04f, 14f), new Color(0.8f, 0.76f, 0.66f));
+                    StoneWall(new Vector3(-141f, 0f, z), new Vector2(1.2f, 10f), 1.9f);
+                    StoneWall(new Vector3(-95f, 0f, z), new Vector2(1.2f, 10f), 1.9f);
+                    Footpath(true, new Vector2(-134f, -88f), new Vector2(-134f, z), new Vector2(-127f, z));
+                    Footpath(true, new Vector2(-109f, z), new Vector2(-102f, z), new Vector2(-102f, -88f));
+                }
+            }
+            Canal(new Vector3(-118f, 0f, (waterStart - 48f) * 0.5f), new Vector2(10f, -48f - waterStart));
+            Footpath(false, new Vector2(-140f, -88f), new Vector2(-127f, -88f));
+            Footpath(false, new Vector2(-109f, -88f), new Vector2(-96f, -88f));
+            arena.AddRouteHint(new Rect(-148f, -104f, 58f, 32f), "黄の中央橋は近道。南北の緑の橋は投擲を防ぐ");
             foreach (float x in new[] { -132f, -104f })
                 foreach (float z in new[] { -124f, -96f, -68f }) Lamp(new Vector3(x, 0f, z));
             Fence(new Vector3(-140f, 0f, -104f), new Vector2(0.3f, 10f));
@@ -834,12 +913,26 @@ namespace PastaSurvivors
             Pedestal(new Vector3(0f, 0f, -127f));
             Flush(root, "Circus circuit");
 
-            // Orange orchard: staggered hedges and tree trunks break charges; a morning market rewards the detour.
+            // Orange orchard: a straight gap admits Vespa charges; the longer route turns behind hedges.
             kit.Box(new Vector3(117f, 0.02f, -92f), new Vector3(62f, 0.03f, 86f), new Color(0.55f, 0.6f, 0.35f));
             foreach (float x in new[] { 96f, 112f, 128f, 144f })
                 foreach (float z in new[] { -58f, -80f, -103f }) RomaTree(new Vector3(x, 0f, z), true);
-            Hedge(new Vector3(112f, 0f, -69f), new Vector2(40f, 1.2f));
-            Hedge(new Vector3(126f, 0f, -89f), new Vector2(40f, 1.2f));
+            // Side hedges prevent an unprotected strip outside the orchard from beating both designed routes.
+            // North and south remain connected to the city; the northern opening is the shared route choice.
+            Hedge(new Vector3(87f, 0f, -91f), new Vector2(1.2f, 82f));
+            Hedge(new Vector3(149f, 0f, -91f), new Vector2(1.2f, 82f));
+            Hedge(new Vector3(101.5f, 0f, -50f), new Vector2(29f, 1.2f));
+            Hedge(new Vector3(136.5f, 0f, -50f), new Vector2(25f, 1.2f));
+            // Both transverse hedges have a 6 m opening centred on x=120.
+            Hedge(new Vector3(104.5f, 0f, -69f), new Vector2(25f, 1.2f));
+            Hedge(new Vector3(127.5f, 0f, -69f), new Vector2(9f, 1.2f));
+            Hedge(new Vector3(111.5f, 0f, -89f), new Vector2(11f, 1.2f));
+            Hedge(new Vector3(134.5f, 0f, -89f), new Vector2(23f, 1.2f));
+            Footpath(false, new Vector2(120f, -54f), new Vector2(120f, -123f), new Vector2(116f, -123f));
+            Footpath(true, new Vector2(120f, -54f), new Vector2(138f, -54f), new Vector2(138f, -74f),
+                new Vector2(100f, -74f), new Vector2(100f, -97f), new Vector2(120f, -97f),
+                new Vector2(120f, -123f), new Vector2(116f, -123f));
+            arena.AddRouteHint(new Rect(108f, -64f, 34f, 18f), "朝市へ：黄は直進・突進に注意。緑は生垣を回る");
             MarketArea(new Vector3(116f, 0f, -120f), 14f, "果樹園の朝市");
             foreach (float x in new[] { 104f, 128f }) StallRow(new Vector3(x, 0f, -120f), new Vector2(2f, 12f));
             WellHead(new Vector3(145f, 0f, -132f));
