@@ -189,7 +189,10 @@ namespace PastaSurvivors
                     {
                         var d = r.b - r.a;
                         float t = Mathf.Clamp01(Vector3.Dot(c - r.a, d) / d.sqrMagnitude);
-                        if ((r.a + d * t - c).magnitude < r.width * 0.5f) col = new Color(0.12f, 0.12f, 0.14f, 0.9f);
+                        if ((r.a + d * t - c).magnitude < r.width * 0.5f)
+                            col = arena.GroundHeight(c) > 0.15f
+                                ? new Color(0.45f, 0.73f, 0.68f, 0.95f)
+                                : new Color(0.12f, 0.12f, 0.14f, 0.9f);
                     }
                     if (arena.WaterCells[i]) col = new Color(0.2f, 0.45f, 0.62f, 0.95f);
                     else if (arena.BlockedCells[i]) col = new Color(0.72f, 0.66f, 0.58f, 0.95f);
@@ -218,7 +221,8 @@ namespace PastaSurvivors
             var district = G.Arena.DistrictAt(p.Position);
             districtName.text = district != null ? district.name : "ローマの街路";
             districtName.color = district != null ? Color.Lerp(district.color, UiKit.Cream, 0.55f) : UiKit.Cream;
-            districtHint.text = district != null ? district.hint : "広場や泉へ抜ける道を探そう";
+            districtHint.text = G.Arena.RouteHintAt(p.Position)
+                ?? (district != null ? district.hint : "広場や泉へ抜ける道を探そう");
         }
 
         public void SetFirstPerson(bool on)
