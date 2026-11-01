@@ -300,6 +300,20 @@ namespace PastaSurvivors
                     kit.Ball(Vector3.zero, 0.42f, new Color(0.45f, 0.24f, 0.14f));
                     kit.Ball(new Vector3(0, 0.12f, 0), new Vector3(0.3f, 0.2f, 0.3f), Tomato);
                     break;
+                case ShotKind.SaucePot:
+                    {
+                        var metal = new Color(0.55f, 0.59f, 0.63f);
+                        kit.Cone(new Vector3(0f, 0.25f, 0f), new Vector3(0.8f, 0.5f, 0.8f), metal, default, 0.9f, 16);
+                        kit.Cyl(new Vector3(0f, 0.5f, 0f), new Vector3(0.82f, 0.08f, 0.82f), new Color(0.85f, 0.87f, 0.9f), default, 16);
+                        kit.Cyl(new Vector3(0f, 0.55f, 0f), new Vector3(0.7f, 0.035f, 0.7f), Tomato, default, 16);
+                        foreach (float side in new[] { -1f, 1f })
+                        {
+                            kit.Bar(new Vector3(side * 0.35f, 0.4f, -0.14f), new Vector3(side * 0.62f, 0.4f, -0.14f), 0.08f, metal);
+                            kit.Bar(new Vector3(side * 0.62f, 0.4f, -0.14f), new Vector3(side * 0.62f, 0.4f, 0.14f), 0.08f, metal);
+                            kit.Bar(new Vector3(side * 0.62f, 0.4f, 0.14f), new Vector3(side * 0.35f, 0.4f, 0.14f), 0.08f, metal);
+                        }
+                        break;
+                    }
                 case ShotKind.Bazooka:
                     {
                         // A fat bundle of dried spaghetti, ends a little uneven, tied with red kitchen string.

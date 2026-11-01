@@ -41,7 +41,7 @@ namespace PastaSurvivors
 
     public enum Behavior { Chase, Thrower, Charger, Sweeper, Elite, Boss, Prop }
     public enum EnemyKind { Signore, Tifoso, Mamma, Chef, Vespista, Gondoliere, Pizzaiolo, Mafioso, Nonna, BossNonna, BossCapitano, BossDon, BossBikeNonna, Barrel }
-    public enum ShotKind { Penne, Fusilli, Farfalle, Ketchup, Pizza, Slipper, Dough, Meatball, Pineapple, Oar, Bazooka, Drop, Parmesan, CheeseWheel }
+    public enum ShotKind { Penne, Fusilli, Farfalle, Ketchup, Pizza, Slipper, Dough, Meatball, Pineapple, Oar, Bazooka, Drop, Parmesan, CheeseWheel, SaucePot }
 
     /// <summary>Special weapons: picked up on the map, fired manually, then cool down.</summary>
     public enum SpecialId { Bazooka, MayoJet, Parmesan, Sprinkler, SugarEspresso, FrappeBeam, CheeseWheel }

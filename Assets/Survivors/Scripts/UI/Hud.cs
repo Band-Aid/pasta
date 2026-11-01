@@ -189,10 +189,7 @@ namespace PastaSurvivors
                     {
                         var d = r.b - r.a;
                         float t = Mathf.Clamp01(Vector3.Dot(c - r.a, d) / d.sqrMagnitude);
-                        if ((r.a + d * t - c).magnitude < r.width * 0.5f)
-                            col = arena.GroundHeight(c) > 0.15f
-                                ? new Color(0.45f, 0.73f, 0.68f, 0.95f)
-                                : new Color(0.12f, 0.12f, 0.14f, 0.9f);
+                        if ((r.a + d * t - c).magnitude < r.width * 0.5f) col = new Color(0.12f, 0.12f, 0.14f, 0.9f);
                     }
                     if (arena.WaterCells[i]) col = new Color(0.2f, 0.45f, 0.62f, 0.95f);
                     else if (arena.BlockedCells[i]) col = new Color(0.72f, 0.66f, 0.58f, 0.95f);
