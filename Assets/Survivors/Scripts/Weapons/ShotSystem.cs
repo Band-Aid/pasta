@@ -30,6 +30,9 @@ namespace PastaSurvivors
         public bool slippery;
         public int bounces;
         public Action<Shot> onEnd;
+        /// <summary>Owned boss attacks expire when their caster flees, morphs or is reused from its pool.</summary>
+        public Enemy owner;
+        public int ownerUid;
     }
 
     public class ShotSystem : MonoBehaviour
@@ -39,7 +42,7 @@ namespace PastaSurvivors
         private readonly List<Enemy> hits = new List<Enemy>(64);
         private Transform root;
         private MaterialPropertyBlock mpb;
-        private static Mesh splatMesh;
+        private static Mesh splatMesh, bossSauceMesh;
 
         public void Init()
         {
@@ -56,7 +59,9 @@ namespace PastaSurvivors
             else
             {
                 s = new Shot { visualKey = key };
-                var mesh = zone ? (splatMesh ??= MakeSplat()) : Models.Shot(kind);
+                var mesh = zone
+                    ? key == "boss_sauce" ? (bossSauceMesh ??= MeshKit.Sector(0f, 1f, 360f, 48, "Boss sauce danger")) : (splatMesh ??= MakeSplat())
+                    : Models.Shot(kind);
                 s.go = Models.Static(mesh, root, key, zone ? Mats.FxAlpha : Mats.Lit, !zone);
                 s.tr = s.go.transform;
                 s.mr = s.go.GetComponent<MeshRenderer>();
@@ -67,6 +72,8 @@ namespace PastaSurvivors
             s.hitCount = 0;
             s.bounces = 0;
             s.onEnd = null;
+            s.owner = null;
+            s.ownerUid = 0;
             s.explodeRadius = 0f;
             s.explodeKnock = 3f;
             s.slow = 0f;
@@ -164,6 +171,68 @@ namespace PastaSurvivors
             return s;
         }
 
+        /// <summary>The landing point locks before a harmless lob; only the marked floor hurts on landing.</summary>
+        public void CastBossSauce(Enemy owner, Vector3 target, float radius, float warning, float duration)
+        {
+            // Keep at most one pending/active sauce patch for this caster.
+            foreach (var old in Active)
+                if (old.owner == owner && old.kind == ShotKind.SaucePot) { old.life = 0f; old.onEnd = null; }
+            int uid = owner.uid;
+            float damage = owner.damage * 0.3f;
+            var pot = Fire(ShotKind.SaucePot, Motion.Lob, owner.Center + Vector3.up, Vector3.zero, 0f, radius, warning, -1);
+            pot.hostile = true;
+            pot.owner = owner; pot.ownerUid = uid;
+            pot.target = G.Arena.OnGround(target);
+            pot.scale = 1.5f;
+            pot.spinRate = 240f;
+            pot.onEnd = landed =>
+            {
+                if (!owner.active || owner.fleeing || owner.uid != uid) return;
+                var sauce = Get("boss_sauce", ShotKind.SaucePot, true);
+                sauce.motion = Motion.Zone;
+                sauce.hostile = true;
+                sauce.owner = owner; sauce.ownerUid = uid;
+                sauce.pos = G.Arena.OnGround(landed.target) + Vector3.up * 0.06f;
+                sauce.vel = Vector3.zero;
+                sauce.radius = radius; sauce.damage = damage;
+                sauce.life = sauce.maxLife = duration;
+                sauce.tickInterval = 0.75f;
+                sauce.tickTimer = 0.2f;
+                sauce.orbitSpeed = 0f;
+                sauce.slot = -1;
+                sauce.tr.SetPositionAndRotation(sauce.pos, Quaternion.identity);
+                sauce.tr.localScale = new Vector3(radius, 1f, radius);
+                mpb.SetColor("_BaseColor", new Color(1f, 0.15f, 0.03f, 0.7f));
+                sauce.mr.SetPropertyBlock(mpb);
+                G.Fx.Burst(sauce.pos, Models.Tomato, 12, 4f, 0.35f, FxKind.Crumb);
+                G.Sfx.Play(SfxId.Slam, 0.55f, 0.9f);
+            };
+            G.Fx.Telegraph(TeleShape.Circle, target, Vector3.forward, radius, 0f, warning);
+            G.Sfx.Play(SfxId.Throw, 0.65f, 0.7f);
+        }
+
+        public float BossSauceRemaining(Enemy owner)
+        {
+            float remaining = 0f;
+            foreach (var s in Active)
+                if (s.kind == ShotKind.SaucePot && s.owner == owner && s.ownerUid == owner.uid && s.active)
+                    remaining = Mathf.Max(remaining, s.life);
+            return remaining;
+        }
+
+        public bool InBossSauce(Vector3 point, float padding)
+        {
+            foreach (var s in Active)
+            {
+                if (s.kind != ShotKind.SaucePot || !s.active || s.owner == null || !s.owner.active || s.owner.fleeing || s.owner.uid != s.ownerUid || s.life <= 0f) continue;
+                var delta = point - (s.motion == Motion.Lob ? s.target : s.pos); delta.y = 0f;
+                // Pending pots also reserve their full landing footprint for escape checks.
+                float radius = s.radius + padding;
+                if (delta.sqrMagnitude < radius * radius) return true;
+            }
+            return false;
+        }
+
         public void Clear()
         {
             foreach (var s in Active) Recycle(s);
@@ -173,6 +242,9 @@ namespace PastaSurvivors
         private void Recycle(Shot s)
         {
             s.active = false;
+            s.owner = null;
+            s.ownerUid = 0;
+            s.onEnd = null;
             s.go.SetActive(false);
             pools[s.visualKey].Push(s);
         }
@@ -186,6 +258,12 @@ namespace PastaSurvivors
             for (int i = Active.Count - 1; i >= 0; i--)
             {
                 var s = Active[i];
+                if (s.owner != null && (!s.owner.active || s.owner.fleeing || s.owner.uid != s.ownerUid))
+                {
+                    Recycle(s);
+                    Active.RemoveAt(i);
+                    continue;
+                }
                 s.life -= dt;
                 bool end = s.life <= 0f;
                 switch (s.motion)
@@ -274,6 +352,22 @@ namespace PastaSurvivors
                         }
                     case Motion.Zone:
                         {
+                            if (s.hostile)
+                            {
+                                s.tickTimer -= dt;
+                                if (!end && s.life > 0.35f && s.tickTimer <= 0f)
+                                {
+                                    s.tickTimer = s.tickInterval;
+                                    var delta = pp - s.pos; delta.y = 0f;
+                                    float reach = s.radius + (player != null ? player.Radius : 0f);
+                                    if (player != null && delta.sqrMagnitude < reach * reach && G.Arena.LineOfSight(s.pos, pp))
+                                        player.TakeDamage(s.damage, s.pos, "boss:sauce");
+                                }
+                                // Keep the full boundary visible; the final fade is harmless.
+                                mpb.SetColor("_BaseColor", new Color(1f, 0.15f, 0.03f, Mathf.Clamp01(s.life / 0.35f) * 0.7f));
+                                s.mr.SetPropertyBlock(mpb);
+                                break;
+                            }
                             if (s.orbitSpeed > 0f)
                             {
                                 var t = G.Enemies.Nearest(s.pos, 14f);
