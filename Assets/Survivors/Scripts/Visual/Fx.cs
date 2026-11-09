@@ -289,17 +289,17 @@ namespace PastaSurvivors
             Update1(f);
         }
 
-        public void Snap(Vector3 origin, Vector3 dir, float radius, float angle, bool evolved)
+        public void Snap(Vector3 origin, Vector3 dir, float radius, float angle, bool evolved, bool napolitan = false)
         {
             int a = Mathf.RoundToInt(angle / 10f) * 10;
             var f = Get("sector" + a, true);
             f.mode = 1; f.pos = origin + Vector3.up * 0.08f; f.radius = radius; f.duration = 0.28f;
-            f.color = evolved ? new Color(1f, 0.55f, 0.2f, 0.85f) : new Color(1f, 0.85f, 0.4f, 0.7f);
+            f.color = napolitan ? new Color(1f, 0.12f, 0.04f, 0.9f) : evolved ? new Color(1f, 0.55f, 0.2f, 0.85f) : new Color(1f, 0.85f, 0.4f, 0.7f);
             f.tr.SetPositionAndRotation(f.pos, Quaternion.LookRotation(dir));
             Update1(f);
             var arc = Get("arc" + a, true);
             arc.mode = 1; arc.pos = f.pos + Vector3.up * 0.02f; arc.radius = radius; arc.duration = 0.34f;
-            arc.color = new Color(1f, 0.95f, 0.7f, 0.95f);
+            arc.color = napolitan ? new Color(1f, 0.45f, 0.08f, 0.95f) : new Color(1f, 0.95f, 0.7f, 0.95f);
             arc.tr.SetPositionAndRotation(arc.pos, Quaternion.LookRotation(dir));
             Update1(arc);
             // Pasta shards spray into the cone.
@@ -311,10 +311,16 @@ namespace PastaSurvivors
                 ep.velocity = d * Random.Range(6f, 12f) + Vector3.up * Random.Range(1f, 4f);
                 ep.startSize = Random.Range(0.1f, 0.18f);
                 ep.startLifetime = Random.Range(0.35f, 0.6f);
-                ep.startColor = Models.PastaGold;
+                ep.startColor = napolitan ? new Color(1f, 0.2f, 0.04f) : Models.PastaGold;
                 ep.rotation3D = new Vector3(Random.value * 360f, Random.value * 360f, 0);
                 crumbs.Emit(ep, 1);
             }
+            if (napolitan)
+                for (int i = 0; i < 5; i++)
+                {
+                    var d = Quaternion.Euler(0, (i / 4f - 0.5f) * angle, 0) * dir;
+                    Burst(origin + d * radius * 0.7f + Vector3.up * 0.4f, new Color(1f, 0.3f, 0.05f), 3, 2.5f, 0.3f, FxKind.Spark);
+                }
             pokiCooldown -= 1f;
             if (pokiCooldown <= 0f)
             {

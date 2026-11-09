@@ -5,7 +5,7 @@ using UnityEngine.InputSystem;
 
 namespace PastaSurvivors
 {
-    public enum GameState { Boot, Title, Playing, LevelUp, Chest, Paused, GameOver, Cleared }
+    public enum GameState { Boot, Title, Playing, LevelUp, Chest, Paused, GameOver, Cleared, Crafting }
 
     /// <summary>Entry point. The scene only contains this component; everything else is created at runtime.</summary>
     public class SurvivorsGame : MonoBehaviour
@@ -25,9 +25,10 @@ namespace PastaSurvivors
         private float bossDefeatedAt = -1f;
         private readonly Dictionary<int, float> damage = new Dictionary<int, float>();
         private bool ending;
-        private int gestureSettingsClosedFrame = -1;
+        private int gameplayInputResumeFrame = -1;
+        private bool craftingFromPause;
         public bool GameplayInputBlocked => (Menus != null && Menus.GestureSettingsOpen)
-            || Time.frameCount == gestureSettingsClosedFrame;
+            || Time.frameCount <= gameplayInputResumeFrame;
 
         private void Awake()
         {
@@ -223,6 +224,9 @@ namespace PastaSurvivors
                 case GameState.Playing:
                     TickPlaying();
                     break;
+                case GameState.Paused:
+                    if (Menus.Current == "pause" && Controls.Craft()) OpenCrafting();
+                    break;
                 case GameState.GameOver:
                     // Keep the world moving through the slow-motion defeat.
                     if (Time.timeScale > 0f)
@@ -237,6 +241,7 @@ namespace PastaSurvivors
 
         private void TickPlaying()
         {
+            if (!GameplayInputBlocked && Controls.Craft()) { OpenCrafting(); return; }
             if (Controls.GestureSettings())
             {
                 if (Menus.GestureSettingsOpen) CloseGestureSettings();
@@ -314,7 +319,43 @@ namespace PastaSurvivors
         public void CloseGestureSettings()
         {
             Menus.Close();
-            gestureSettingsClosedFrame = Time.frameCount;
+            gameplayInputResumeFrame = Time.frameCount;
+        }
+
+        public void OpenCrafting()
+        {
+            if (State != GameState.Playing && State != GameState.Paused) return;
+            craftingFromPause = State == GameState.Paused;
+            State = GameState.Crafting;
+            Time.timeScale = 0f;
+            G.Hud.HideCards();
+            Music.Duck(true);
+            Menus.ShowCrafting();
+            UpdateCursor();
+        }
+
+        public void CloseCrafting()
+        {
+            if (State != GameState.Crafting) return;
+            gameplayInputResumeFrame = Time.frameCount + 1;
+            if (craftingFromPause) { State = GameState.Paused; Pause(); }
+            else Resume();
+            UpdateCursor();
+        }
+
+        public void Craft(RecipeDef recipe)
+        {
+            if (State != GameState.Crafting || !G.Player.Alive || !G.Player.Crafting.TryCraft(recipe)) return;
+            var weapon = G.Player.GetWeapon(recipe.weapon);
+            G.Player.SetMain(G.Player.Weapons.IndexOf(weapon), false);
+            G.Player.Anim.OnSwitch();
+            G.Hud.MainSwitched(weapon);
+            G.Hud.Banner("完成！ " + recipe.name, recipe.color);
+            G.Sfx.Play(SfxId.Chest, 0.7f, 1.2f);
+            G.Fx.Burst(G.Player.Position + Vector3.up, recipe.color, 18, 5f, 0.2f, FxKind.Spark);
+            int selection = Menus.Nav.index;
+            Menus.ShowCrafting();
+            Menus.Nav.index = selection;
         }
 
         public void Pause()
@@ -368,7 +409,7 @@ namespace PastaSurvivors
                 if (!w.MaxedOut)
                     pool.Add((new Offer
                     {
-                        kind = Offer.Kind.UpWeapon, weapon = w.Id, title = w.DisplayName, icon = w.evolved ? w.def.evoIcon : w.def.icon,
+                        kind = Offer.Kind.UpWeapon, weapon = w.Id, title = w.DisplayName, icon = w.Icon,
                         tag = $"Lv{w.level} → {w.level + 1}", desc = w.def.levelText[w.level - 1], tagColor = UiKit.Gold
                     }, 1.3f));
             if (p.Weapons.Count < Player.MaxWeapons)
@@ -479,7 +520,10 @@ namespace PastaSurvivors
             {
                 rewards.Add(new Offer
                 {
-                    kind = Offer.Kind.Evolve, weapon = evo.Id, title = evo.def.evoName, icon = evo.def.evoIcon, tag = "進化！", desc = evo.def.evoDesc,
+                    kind = Offer.Kind.Evolve, weapon = evo.Id,
+                    title = evo.Recipe != null ? evo.Recipe.name + "・" + evo.def.evoName : evo.def.evoName,
+                    icon = evo.Recipe != null ? evo.Recipe.icon : evo.def.evoIcon, tag = "進化！",
+                    desc = evo.def.evoDesc + (evo.Recipe != null ? "\nクラフト効果も継続。" : ""),
                     tagColor = new Color(1f, 0.6f, 0.3f)
                 });
                 G.Sfx.Play(SfxId.Evolve, 0.9f);
@@ -513,7 +557,7 @@ namespace PastaSurvivors
             var options = new List<Offer>();
             foreach (var w in p.Weapons)
                 if (!w.MaxedOut)
-                    options.Add(new Offer { kind = Offer.Kind.UpWeapon, weapon = w.Id, title = w.DisplayName, icon = w.evolved ? w.def.evoIcon : w.def.icon, tag = $"Lv{w.level + 1}", desc = w.def.levelText[w.level - 1], tagColor = UiKit.Gold });
+                    options.Add(new Offer { kind = Offer.Kind.UpWeapon, weapon = w.Id, title = w.DisplayName, icon = w.Icon, tag = $"Lv{w.level + 1}", desc = w.def.levelText[w.level - 1], tagColor = UiKit.Gold });
             foreach (var id in p.Passives)
             {
                 var def = GameData.Passive(id);

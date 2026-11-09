@@ -27,6 +27,7 @@ namespace PastaSurvivors
         public readonly List<Weapon> Weapons = new List<Weapon>();
         public readonly List<PassiveId> Passives = new List<PassiveId>();
         public readonly int[] PassiveLevels = new int[8];
+        public CraftingInventory Crafting { get; private set; }
 
         public float Might, CooldownMul, AreaMul, DurationMul, MoveSpeed, MagnetRadius, GrowthMul, GreedMul, Armor, Regen;
         public int AmountBonus, Revivals;
@@ -128,6 +129,7 @@ namespace PastaSurvivors
         {
             Character = c;
             CharIndex = index;
+            Crafting = new CraftingInventory(this);
             Anim = gameObject.AddComponent<PlayerAnim>();
             Anim.Build(c, index);
         }
@@ -137,6 +139,7 @@ namespace PastaSurvivors
             foreach (var w in Weapons) w.Removed();
             Weapons.Clear();
             Passives.Clear();
+            Crafting.Clear();
             System.Array.Clear(PassiveLevels, 0, PassiveLevels.Length);
             Level = 1;
             Xp = 0f;

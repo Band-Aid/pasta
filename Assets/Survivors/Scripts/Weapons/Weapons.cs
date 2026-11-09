@@ -8,6 +8,7 @@ namespace PastaSurvivors
         public WeaponDef def;
         public int level = 1;
         public bool evolved;
+        public RecipeDef Recipe { get; private set; }
         protected float timer = 0.4f;
         protected readonly List<Enemy> hits = new List<Enemy>(128);
         private readonly List<(float at, System.Action act)> queued = new List<(float, System.Action)>();
@@ -15,8 +16,10 @@ namespace PastaSurvivors
         protected Player P => G.Player;
         public WeaponId Id => def.id;
         public int Slot => (int)def.id;
-        public string DisplayName => evolved ? def.evoName : def.name;
+        public string DisplayName => Recipe != null ? Recipe.name + (evolved ? "・" + def.evoName : "") : evolved ? def.evoName : def.name;
+        public string Icon => Recipe != null ? Recipe.icon : evolved ? def.evoIcon : def.icon;
         public bool MaxedOut => level >= WeaponDef.MaxLevel;
+        public void ApplyRecipe(RecipeDef recipe) => Recipe = recipe;
 
         public static Weapon Create(WeaponId id)
         {
@@ -119,14 +122,15 @@ namespace PastaSurvivors
 
         private void Snap(WStats s, Vector3 dir)
         {
-            float radius = 4.2f * Area(s);
-            float half = 55f;
+            bool napolitan = Recipe != null && Recipe.id == RecipeId.Napolitan;
+            float radius = 4.2f * Area(s) * (napolitan ? 1.2f : 1f);
+            float half = napolitan ? 70f : 55f;
             Vector3 origin = P.Position;
-            G.Fx.Snap(origin, dir, radius, half * 2f, evolved);
+            G.Fx.Snap(origin, dir, radius, half * 2f, evolved, napolitan);
             P.Anim.Snap();
             G.Sfx.Play(SfxId.Snap, 0.9f, Random.Range(0.92f, 1.08f));
             if (P.FirstPerson && IsMain) G.Cam.Kick(1.2f);
-            int n = G.Enemies.Query(origin + dir * radius * 0.5f, radius * 0.75f, hits);
+            int n = napolitan ? G.Enemies.Query(origin, radius, hits) : G.Enemies.Query(origin + dir * radius * 0.5f, radius * 0.75f, hits);
             float dmg = Dmg(s);
             for (int i = 0; i < n; i++)
             {
@@ -134,7 +138,7 @@ namespace PastaSurvivors
                 Vector3 d = e.pos - origin; d.y = 0f;
                 if (d.magnitude > radius + e.radius) continue;
                 if (d.magnitude > 0.6f && Vector3.Angle(dir, d) > half + 10f) continue;
-                G.Enemies.Damage(e, dmg, dir + d.normalized * 0.4f, s.knockback, Slot);
+                G.Enemies.Damage(e, dmg, dir + d.normalized * 0.4f, s.knockback * (napolitan ? 2.4f : 1f), Slot);
                 if (IsMain) e.stun = Mathf.Max(e.stun, 0.6f);
                 if (evolved && e.active && !e.fleeing) G.Enemies.Launch(e, (dir + d.normalized * 0.3f).normalized * 17f, dmg * 0.7f);
             }
@@ -406,6 +410,7 @@ namespace PastaSurvivors
                 shot.knock = s.knockback;
                 shot.spinRate = 400f;
                 shot.scale = 1.1f * area;
+                shot.enrages = Recipe != null && Recipe.id == RecipeId.PineapplePizza;
                 if (evolved)
                 {
                     shot.explodeRadius = 2.3f * area;

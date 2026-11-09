@@ -338,6 +338,27 @@ namespace PastaSurvivors
             kit.Clear();
             switch (key)
             {
+                case "ingredient_Pasta":
+                    for (int i = 0; i < 7; i++)
+                        kit.Bar(new Vector3((i - 3) * 0.055f, -0.4f, 0f), new Vector3((i - 3) * 0.055f, 0.45f, 0f), 0.035f, i % 2 == 0 ? Semolina : SemolinaPale);
+                    kit.Box(Vector3.zero, new Vector3(0.44f, 0.18f, 0.1f), Tomato);
+                    break;
+                case "ingredient_Ketchup":
+                    kit.Cyl(Vector3.zero, new Vector3(0.32f, 0.55f, 0.32f), Tomato);
+                    kit.Cone(new Vector3(0, 0.36f, 0), new Vector3(0.3f, 0.17f, 0.3f), Tomato, default, 0.3f);
+                    kit.Cyl(new Vector3(0, 0.49f, 0), new Vector3(0.12f, 0.09f, 0.12f), Color.white);
+                    kit.Box(new Vector3(0, 0, 0.17f), new Vector3(0.22f, 0.2f, 0.02f), Color.white);
+                    break;
+                case "ingredient_Pineapple":
+                    kit.Ball(Vector3.zero, new Vector3(0.5f, 0.65f, 0.5f), new Color(1f, 0.75f, 0.12f));
+                    for (int i = 0; i < 16; i++)
+                    {
+                        float a = (i % 8) * Mathf.PI * 0.25f;
+                        kit.Box(new Vector3(Mathf.Cos(a) * 0.22f, (i / 8 - 0.5f) * 0.2f, Mathf.Sin(a) * 0.22f), Vector3.one * 0.08f, PastaGold, new Vector3(0f, -a * Mathf.Rad2Deg, 45f));
+                    }
+                    for (int i = 0; i < 5; i++)
+                        kit.Cone(new Vector3(0, 0.4f, 0), new Vector3(0.12f, 0.35f, 0.12f), Basil, new Vector3(25f, i * 72f, 0f), 0f);
+                    break;
                 case "gem1": Gem(new Color(1f, 0.82f, 0.3f), 0.32f); break;
                 case "gem2": Gem(new Color(0.35f, 0.9f, 0.35f), 0.4f); break;
                 case "gem3": Gem(new Color(1f, 0.3f, 0.25f), 0.5f); break;
@@ -353,6 +374,7 @@ namespace PastaSurvivors
                     kit.Cyl(new Vector3(0, 0.25f, 0), new Vector3(0.24f, 0.05f, 0.24f), new Color(1f, 0.8f, 0.2f));
                     kit.Box(new Vector3(0, 0, 0.29f), new Vector3(0.16f, 0.2f, 0.02f), new Color(1f, 0.8f, 0.2f));
                     break;
+                case "ingredient_Pizza":
                 case "pizzaslice":
                     kit.Cone(Vector3.zero, new Vector3(0.75f, 0.1f, 0.75f), new Color(0.92f, 0.7f, 0.38f), default, 1f, 3);
                     kit.Cone(new Vector3(0, 0.04f, 0), new Vector3(0.62f, 0.08f, 0.62f), Tomato, default, 1f, 3);

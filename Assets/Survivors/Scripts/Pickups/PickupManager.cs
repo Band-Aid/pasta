@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace PastaSurvivors
 {
-    public enum PickupKind { Gem, Coin, CoinBag, Pizza, Fork, Rosary, Chest, Special }
+    public enum PickupKind { Gem, Coin, CoinBag, Pizza, Fork, Rosary, Chest, Special, Ingredient }
 
     public class Pickup
     {
@@ -14,6 +14,7 @@ namespace PastaSurvivors
         public bool attracted, active;
         public float speed, age, seed;
         public SpecialId special;
+        public IngredientId ingredient;
         /// <summary>A dropped special can't be re-collected until the player steps away.</summary>
         public bool armed = true;
         public GameObject go;
@@ -30,6 +31,8 @@ namespace PastaSurvivors
         private Pickup overflow;
         private float barrelTimer = 8f, gemChain, gemChainTimer, specialTimer = 10f;
         private int specialsSpawned;
+        private float ingredientTimer = 4f;
+        private int ingredientRecipe;
         private MaterialPropertyBlock beamBlock;
 
         public void Init()
@@ -51,14 +54,15 @@ namespace PastaSurvivors
                 bool glow = kind == PickupKind.Gem || kind == PickupKind.Chest || kind == PickupKind.Rosary || kind == PickupKind.Special;
                 p.go = Models.Static(Models.Get(key), root, key, glow ? Mats.Glow : Mats.Lit, kind == PickupKind.Chest);
                 p.tr = p.go.transform;
-                if (kind == PickupKind.Special)
+                if (kind == PickupKind.Special || kind == PickupKind.Ingredient)
                 {
                     // A column of light so specials can be found from across the map.
                     var beam = Models.Static(Models.Get("beam"), p.tr, "Beam", Mats.FxAdd, false);
                     beamBlock ??= new MaterialPropertyBlock();
-                    beamBlock.SetColor("_BaseColor", new Color(1f, 0.8f, 0.35f, 0.22f));
+                    beamBlock.SetColor("_BaseColor", kind == PickupKind.Ingredient ? new Color(0.25f, 1f, 0.8f, 0.18f) : new Color(1f, 0.8f, 0.35f, 0.22f));
                     beam.GetComponent<MeshRenderer>().SetPropertyBlock(beamBlock);
                     beam.transform.localPosition = Vector3.down * 0.6f;
+                    if (kind == PickupKind.Ingredient) beam.transform.localScale = new Vector3(0.7f, 0.45f, 0.7f);
                 }
             }
             p.kind = kind;
@@ -72,7 +76,7 @@ namespace PastaSurvivors
             p.seed = Random.value * 10f;
             p.go.SetActive(true);
             p.tr.position = p.pos;
-            p.tr.localScale = Vector3.one * (kind == PickupKind.Chest ? 1.3f : kind == PickupKind.Special ? 1.5f : 1f);
+            p.tr.localScale = Vector3.one * (kind == PickupKind.Chest ? 1.3f : kind == PickupKind.Special || kind == PickupKind.Ingredient ? 1.5f : 1f);
             Active.Add(p);
             if (kind == PickupKind.Gem) gemCount++;
             return p;
@@ -117,6 +121,49 @@ namespace PastaSurvivors
             return p;
         }
 
+        public void DropIngredient(IngredientId id, Vector3 pos)
+        {
+            var p = Spawn(PickupKind.Ingredient, "ingredient_" + id, G.Arena.Resolve(pos, 0.6f), 1);
+            p.ingredient = id;
+            G.Fx.Ring(p.pos + Vector3.up * 0.1f, 0.9f, new Color(0.3f, 1f, 0.8f, 0.8f), 0.5f, 0.15f);
+        }
+
+        private bool IngredientOnMap(IngredientId id)
+        {
+            foreach (var p in Active) if (p.kind == PickupKind.Ingredient && p.ingredient == id) return true;
+            return false;
+        }
+
+        /// <summary>Deliver missing recipe supplies near the player, without depending on random level-up offers.</summary>
+        private void TickIngredients(float dt, Vector3 pp)
+        {
+            ingredientTimer -= dt;
+            if (ingredientTimer > 0f) return;
+            ingredientTimer = 18f;
+            var inventory = G.Player.Crafting;
+            for (int i = 0; i < CraftingData.Recipes.Length; i++)
+            {
+                var recipe = CraftingData.Recipes[ingredientRecipe++ % CraftingData.Recipes.Length];
+                bool needBase = inventory.Needs(recipe.basis) && !IngredientOnMap(recipe.basis);
+                bool needTopping = inventory.Needs(recipe.topping) && !IngredientOnMap(recipe.topping);
+                if (!needBase && !needTopping) continue;
+                for (int attempt = 0; attempt < 24; attempt++)
+                {
+                    var at = pp + Quaternion.Euler(0, Random.value * 360f, 0) * Vector3.forward * Random.Range(4f, 8f);
+                    var next = at + Vector3.right * 1.4f;
+                    if (!G.Arena.Inside(at, 1f) || !G.Arena.Inside(next, 1f)
+                        || G.Arena.Blocked(at, 0.8f) || G.Arena.Blocked(next, 0.8f)
+                        || !G.Arena.WalkClear(pp, at, 0.6f) || !G.Arena.WalkClear(at, next, 0.6f)) continue;
+                    if (needBase) DropIngredient(recipe.basis, at);
+                    if (needTopping) DropIngredient(recipe.topping, needBase ? next : at);
+                    G.Fx.Banner("クラフト食材が出現！ 緑の光を拾って C / X で合成", new Color(0.4f, 1f, 0.8f));
+                    return;
+                }
+                ingredientTimer = 2f; // Try another nearby place soon if this street was too crowded with cover.
+                return;
+            }
+        }
+
         /// <summary>Specials appear on the stage's pedestals: first one nearby, later ones across the map.</summary>
         private void TickSpecials(float dt, Vector3 pp)
         {
@@ -153,6 +200,18 @@ namespace PastaSurvivors
             float r = Random.value;
             var kind = r < 0.38f ? PickupKind.Pizza : r < 0.68f ? PickupKind.Coin : r < 0.8f ? PickupKind.CoinBag : r < 0.93f ? PickupKind.Fork : PickupKind.Rosary;
             Drop(kind, pos);
+            // Food is extra loot: healing and coin drops keep their original probabilities.
+            if (Random.value < 0.45f && G.Player != null)
+            {
+                int start = Random.Range(0, 4);
+                for (int i = 0; i < 4; i++)
+                {
+                    var id = (IngredientId)((start + i) % 4);
+                    if (!G.Player.Crafting.Needs(id) || IngredientOnMap(id)) continue;
+                    DropIngredient(id, pos);
+                    break;
+                }
+            }
         }
 
         public void Clear()
@@ -164,6 +223,9 @@ namespace PastaSurvivors
             barrelTimer = 8f;
             specialTimer = 10f;
             specialsSpawned = 0;
+            ingredientTimer = 4f;
+            ingredientRecipe = 0;
+            gemChain = gemChainTimer = 0f;
         }
 
         private void Recycle(Pickup p)
@@ -194,6 +256,11 @@ namespace PastaSurvivors
                 p.age += dt;
                 Vector3 d = pp - p.pos; d.y = 0f;
                 float dist2 = d.sqrMagnitude;
+                if (p.kind == PickupKind.Ingredient && pl.Crafting.Count(p.ingredient) >= CraftingInventory.Capacity)
+                {
+                    p.attracted = false;
+                    continue;
+                }
                 if (p.kind == PickupKind.Special)
                 {
                     if (!p.armed && dist2 > 2.4f * 2.4f) p.armed = true;
@@ -233,6 +300,7 @@ namespace PastaSurvivors
             }
 
             TickSpecials(dt, pp);
+            TickIngredients(dt, pp);
 
             // Wine barrels to break for food and coins — markets get restocked much more often.
             barrelTimer -= dt;
@@ -347,6 +415,14 @@ namespace PastaSurvivors
                     if (pl.Special.HasValue && pl.Special.Value != p.special)
                         SpawnSpecial(pl.Special.Value, p.pos, false); // swap: leave the old one on the pedestal
                     pl.GiveSpecial(p.special);
+                    break;
+                case PickupKind.Ingredient:
+                    int readyBefore = pl.Crafting.ReadyCount;
+                    pl.Crafting.Add(p.ingredient);
+                    G.Sfx.Play(SfxId.Gem, 0.5f, 1.25f);
+                    G.Fx.Shout(pl.Position + Vector3.up * 2.4f, CraftingData.Name(p.ingredient) + " +1", new Color(0.4f, 1f, 0.8f));
+                    if (pl.Crafting.ReadyCount > readyBefore)
+                        G.Fx.Banner("クラフト可能！ C / パッドX でレシピを選ぼう", new Color(0.4f, 1f, 0.8f));
                     break;
             }
         }

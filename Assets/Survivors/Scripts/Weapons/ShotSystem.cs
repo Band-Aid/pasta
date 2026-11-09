@@ -28,6 +28,7 @@ namespace PastaSurvivors
         public bool sticky;
         /// <summary>Zone of mayonnaise: Italians who step in it slip and fall.</summary>
         public bool slippery;
+        public bool enrages;
         public int bounces;
         public Action<Shot> onEnd;
     }
@@ -72,6 +73,7 @@ namespace PastaSurvivors
             s.slow = 0f;
             s.sticky = false;
             s.slippery = false;
+            s.enrages = false;
             s.spin = UnityEngine.Random.value * 360f;
             s.scale = 1f;
             s.go.SetActive(true);
@@ -380,6 +382,7 @@ namespace PastaSurvivors
                 }
                 var push = s.motion == Motion.Orbit ? (e.pos - G.Player.Position) : s.vel;
                 G.Enemies.Damage(e, s.damage, push, s.knock, s.slot);
+                if (s.enrages) G.Enemies.Enrage(e, s.vel, s.damage * 0.8f, s.slot);
                 G.Fx.Burst(s.pos, Models.PastaGold, 3, 3f, 0.15f, FxKind.Crumb);
                 if (s.pierce < 900 && --s.pierce <= 0) return true;
             }
