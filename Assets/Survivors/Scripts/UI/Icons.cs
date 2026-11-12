@@ -35,6 +35,16 @@ namespace PastaSurvivors
         {
             switch (key)
             {
+                case "cheesewheel":
+                    Line(2, 10, 9, 10, 1.2f, YL);
+                    Line(1, 16, 8, 16, 1.2f, Wt);
+                    Line(3, 22, 9, 22, 1.2f, YL);
+                    Ellipse(20, 15, 10, 12, YD);
+                    Ellipse(17, 16, 9, 12, Y);
+                    Ellipse(17, 16, 7, 10, YL);
+                    Circle(14, 20, 1.8f, YD); Circle(20, 16, 2.1f, YD);
+                    Circle(15, 10, 1.6f, YD); Circle(20, 23, 1.3f, YD);
+                    break;
                 case "spaghetti":
                     for (int i = 0; i < 5; i++)
                     {

@@ -15,11 +15,17 @@ namespace PastaSurvivors
         public Vector3 pos, facing = Vector3.back, knock;
         public float hp, maxHp, damage, speedMul = 1f, radius, scale;
         public float flash, stun, slow, buff;
+        /// <summary>Shared lockout across all combat CC sources: active slow plus recovery time.</summary>
+        public float bossCcCooldown;
         /// <summary>Scared (Frappé Beam): runs away from the player with arms in the air.</summary>
         public float fear;
         /// <summary>Slipped on mayonnaise: time left flat on the back, and until the next slip can happen.</summary>
         public float slip, slipCooldown;
         public const float SlipTime = 0.9f;
+        /// <summary>Rolled into a paper-thin silhouette by a wheel, including during the defeat animation.</summary>
+        public float flattened;
+        public Vector3 flattenDir;
+        public const float FlattenTime = 1.5f;
         public bool flashing, fleeing, frozen, active;
         public float fleeT;
         public Vector3 fleeDir;
@@ -80,6 +86,7 @@ namespace PastaSurvivors
         public bool IsElite => def.behavior == Behavior.Elite;
         public bool IsProp => def.behavior == Behavior.Prop;
         public bool Targetable => active && !fleeing && !IsProp;
+        public float CcSpeedMultiplier => slow <= 0f ? 1f : IsBoss ? def.bossCcSpeedMultiplier : 0.55f;
         public float HpFraction => maxHp > 0 ? Mathf.Clamp01(hp / maxHp) : 0f;
         public Vector3 Center => pos + Vector3.up * (0.9f * scale);
 
@@ -104,12 +111,19 @@ namespace PastaSurvivors
                 fall = 80f * Mathf.Clamp01(k / 0.15f) * Mathf.Clamp01((1f - k) / 0.25f);
                 hop = Mathf.Sin(Mathf.Clamp01(k / 0.3f) * Mathf.PI) * 0.35f;
             }
-            t.position = pos + Vector3.up * (lift + hop);
-            if (facing.sqrMagnitude > 0.0001f)
+            float flat = Mathf.Clamp01(flattened / 0.22f);
+            float fade = fleeing && !def.nextPhase.HasValue
+                ? Mathf.Clamp01(((IsBoss ? 2.2f : 1f) - fleeT) / 0.25f) : 1f;
+            // Lie face-up, squeeze the body's depth, and keep the complete human silhouette visible from above.
+            t.localScale = new Vector3(Mathf.Lerp(1f, 1.25f, flat), 1f, Mathf.Lerp(1f, 0.055f, flat)) * (scale * fade);
+            t.position = pos + Vector3.up * ((lift + hop) * (1f - flat) + 0.12f * flat);
+            var look = flattened > 0f ? flattenDir : facing;
+            if (look.sqrMagnitude > 0.0001f)
             {
-                var rot = Quaternion.LookRotation(facing);
+                var rot = Quaternion.LookRotation(look);
                 if (spin != 0f) rot = rot * Quaternion.Euler(0f, 0f, spin);
                 if (fall > 0f) rot = rot * Quaternion.Euler(-fall, 0f, 0f);
+                if (flat > 0f) rot = rot * Quaternion.Euler((-90f + Mathf.Sin(gesture * 14f) * 1.5f) * flat, 0f, 0f);
                 t.rotation = rot;
             }
         }
@@ -119,12 +133,31 @@ namespace PastaSurvivors
             var r = rig;
             if (r.torso == null || dt <= 0f) return;
             bool canGesture = approaching && moveSpeed > 0.1f && active
-                && !frozen && !fleeing && fear <= 0f && stun <= 0f && flash <= 0f
+                && !frozen && !fleeing && flattened <= 0f && fear <= 0f && stun <= 0f && flash <= 0f
                 && dominoTime <= 0f && rageTime <= 0f && knock.sqrMagnitude < 0.04f && state == 0
                 && !IsBoss && !IsProp && !r.seated && (r.freeHandL || r.freeHandR);
             // Never resume a half-finished gesture after an attack, hit or loss of approach.
             if (!canGesture) InterruptApproachGesture();
             var g = r.gait;
+            if (flattened > 0f)
+            {
+                gesture += dt;
+                r.torso.localPosition = Vector3.zero;
+                r.torso.localRotation = Quaternion.identity;
+                if (r.spine != null) r.spine.localRotation = Quaternion.identity;
+                if (r.head != null) r.head.localRotation = Quaternion.identity;
+                if (r.legL != null)
+                {
+                    r.legL.localRotation = Quaternion.Euler(0f, 0f, -18f);
+                    r.legR.localRotation = Quaternion.Euler(0f, 0f, 18f);
+                }
+                if (r.armL != null)
+                {
+                    r.armL.localRotation = Quaternion.Euler(0f, 0f, -70f);
+                    r.armR.localRotation = Quaternion.Euler(0f, 0f, 70f);
+                }
+                return;
+            }
             float amp = Mathf.Clamp01(moveSpeed / 2f);
             bool panic = fleeing || fear > 0f || rageTime > 0f;
             float move = Mathf.Max(amp, panic ? 1f : 0f);

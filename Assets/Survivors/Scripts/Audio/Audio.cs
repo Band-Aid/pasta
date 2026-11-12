@@ -5,14 +5,22 @@ namespace PastaSurvivors
 {
     public enum SfxId { Snap, Pop, Slam, Whoosh, Splat, Gem, Coin, Heal, Magnet, Hurt, Poof, Throw, Vroom, Boss, LevelUp, Chest, Crate, Dash, Select, Confirm, Evolve, Beam, Bell }
 
-    /// <summary>All sound effects are synthesised at startup; a small voice pool with per-sound rate limiting keeps hordes from clipping.</summary>
+    /// <summary>Cached synthesis, non-repeating takes and bounded pools keep combat varied without a wall of sound.</summary>
     public class Sfx : MonoBehaviour
     {
         private const int Rate = 44100;
+        private const int CueVoices = 4;
         private readonly Dictionary<SfxId, AudioClip> clips = new Dictionary<SfxId, AudioClip>();
+        private readonly Dictionary<SfxId, AudioClip[]> variations = new Dictionary<SfxId, AudioClip[]>();
+        private readonly Dictionary<SfxId, int> lastTake = new Dictionary<SfxId, int>();
         private readonly Dictionary<SfxId, float> lastPlayed = new Dictionary<SfxId, float>();
+        private readonly List<AudioClip> generated = new List<AudioClip>();
+        // Sound variation must not change enemy spawns, loot or weapon randomness.
+        private readonly System.Random soundRandom = new System.Random(194625);
         private AudioSource[] voices;
-        private int next;
+        private float[] voiceGains;
+        private int next, nextCue;
+        private EnemyCries cries;
         private float volume = SaveData.DefaultSfxVolume;
         public float Volume
         {
@@ -20,21 +28,25 @@ namespace PastaSurvivors
             set
             {
                 volume = Mathf.Clamp01(value);
-                if (voices == null) return;
-                foreach (var voice in voices) voice.volume = volume;
+                if (voices != null)
+                    for (int i = 0; i < voices.Length; i++) voices[i].volume = volume * voiceGains[i];
+                if (cries != null) cries.Volume = volume;
             }
         }
 
         public void Init()
         {
             voices = new AudioSource[20];
+            voiceGains = new float[voices.Length];
             for (int i = 0; i < voices.Length; i++)
             {
                 voices[i] = gameObject.AddComponent<AudioSource>();
                 voices[i].playOnAwake = false;
                 voices[i].spatialBlend = 0f;
                 voices[i].ignoreListenerPause = true;
+                voiceGains[i] = 1f;
             }
+            cries = new EnemyCries(gameObject);
             Volume = SaveData.SfxVolume;
             clips[SfxId.Snap] = PastaAudio.Snap;
             clips[SfxId.Pop] = Make("pop", 0.08f, (t, n) => Mathf.Sin(2 * Mathf.PI * (900f - 3000f * t) * t) * Env(t, 0.002f, 40f));
@@ -63,19 +75,132 @@ namespace PastaSurvivors
             // Bicycle bell: two strikes of an inharmonic bell with a clapper rattle.
             clips[SfxId.Bell] = Make("bell", 0.75f, (t, n) => Bell(t) + Bell(t - 0.17f) * 0.9f);
             clips[SfxId.Evolve] = Make("evolve", 1.6f, (t, n) => Arp(t, new[] { 262f, 330f, 392f, 523f, 659f, 784f, 1047f, 1319f }, 0.1f) * 0.5f + Mathf.Sin(2 * Mathf.PI * 131f * t) * Env(t, 0.1f, 1.5f) * 0.2f);
+
+            // Each bank includes the original plus three takes with different transients,
+            // resonances and timing, rather than just replaying a pitch-shifted sample.
+            AddVariations(SfxId.Snap, 0.24f, DrySnap);
+            AddVariations(SfxId.Pop, 0.12f, (t, n, v) =>
+                (Mathf.Sin(2 * Mathf.PI * ((740f + v * 95f) * t - (1100f + v * 240f) * t * t))
+                + n * 0.15f * Mathf.Exp(-t * 90f)) * Env(t, 0.0015f, 32f + v * 4f) * 0.8f);
+            AddVariations(SfxId.Slam, 0.5f, (t, n, v) =>
+                (Mathf.Sin(2 * Mathf.PI * ((58f + v * 7f) * t - 17f * t * t)) * 0.75f
+                + n * (0.3f + v * 0.05f) * Mathf.Exp(-t * (13f + v * 2f))) * Env(t, 0.003f, 5f + v));
+            AddVariations(SfxId.Whoosh, 0.32f, (t, n, v) =>
+                n * Mathf.Pow(Mathf.Sin(Mathf.PI * t / 0.32f), 1f + v * 0.4f)
+                * (0.4f + 0.1f * Mathf.Sin(t * (32f + v * 11f))) * 0.8f);
+            AddVariations(SfxId.Splat, 0.3f, (t, n, v) =>
+                (n * 0.6f + Mathf.Sin(2 * Mathf.PI * (125f + v * 29f) * t + Mathf.Sin(t * 95f) * 1.5f) * 0.35f)
+                * Env(t, 0.002f, 11f + v * 2f) * (0.75f + 0.25f * Mathf.Cos(t * (75f + v * 23f))));
+            AddVariations(SfxId.Gem, 0.1f, (t, n, v) =>
+                (Mathf.Sin(2 * Mathf.PI * 1568f * t) + (0.2f + v * 0.1f) * Mathf.Sin(2 * Mathf.PI * 3136f * t))
+                * Env(t, 0.001f + v * 0.0005f, 37f + v * 4f) * 0.55f);
+            AddVariations(SfxId.Poof, 0.24f, (t, n, v) =>
+                (n * 0.45f + Mathf.Sin(2 * Mathf.PI * ((320f + v * 65f) * t + 400f * t * t)) * 0.25f)
+                * Env(t, 0.004f, 13f + v * 3f));
+            AddVariations(SfxId.Throw, 0.2f, (t, n, v) =>
+                n * Mathf.Sin(Mathf.PI * t / 0.2f) * (0.3f + 0.1f * Mathf.Sin(t * (38f + v * 15f))));
+            AddVariations(SfxId.Crate, 0.35f, (t, n, v) =>
+                (n * 0.45f + Mathf.Sin(2 * Mathf.PI * (115f + v * 33f) * t) * 0.35f
+                + Mathf.Sin(2 * Mathf.PI * (370f + v * 61f) * t) * 0.15f) * Env(t, 0.001f, 10f + v * 2f));
+            AddVariations(SfxId.Dash, 0.24f, (t, n, v) =>
+                (n * 0.4f * Mathf.Sin(Mathf.PI * t / 0.24f)
+                + Mathf.Sin(2 * Mathf.PI * ((170f + v * 25f) * t + 330f * t * t)) * Env(t, 0.01f, 9f) * 0.15f));
+            AddVariations(SfxId.Beam, 0.5f, (t, n, v) =>
+                (Saw(t * (190f + v * 15f) + Mathf.Sin(t * (31f + v * 3f)) * 0.5f) * 0.2f
+                + n * (Mathf.Sin(t * 2 * Mathf.PI * (19f + v * 3f)) > 0.5f ? 0.35f : 0.06f))
+                * Mathf.Min(1f, t / 0.04f) * Mathf.Min(1f, (0.5f - t) / 0.08f));
         }
 
         public void Play(SfxId id, float volume = 1f, float pitch = 1f)
         {
-            if (voices == null || !clips.TryGetValue(id, out var clip)) return;
+            if (voices == null || Volume <= 0f || volume <= 0f || !clips.TryGetValue(id, out var clip)) return;
             float now = Time.unscaledTime;
-            float gap = id == SfxId.Gem || id == SfxId.Poof || id == SfxId.Pop ? 0.035f : 0.05f;
+            float gap = id == SfxId.Gem || id == SfxId.Poof || id == SfxId.Pop ? 0.06f : 0.05f;
             if (lastPlayed.TryGetValue(id, out var last) && now - last < gap) return;
+            bool cue = id == SfxId.Hurt || id == SfxId.Boss || id == SfxId.Bell || id == SfxId.LevelUp
+                || id == SfxId.Chest || id == SfxId.Evolve || id == SfxId.Select || id == SfxId.Confirm;
+            int slot = FindVoice(cue);
+            if (slot < 0) return;
             lastPlayed[id] = now;
-            var v = voices[next];
-            next = (next + 1) % voices.Length;
-            v.pitch = pitch;
-            v.PlayOneShot(clip, volume);
+            if (variations.TryGetValue(id, out var bank))
+            {
+                int take;
+                if (lastTake.TryGetValue(id, out int previous))
+                {
+                    take = soundRandom.Next(bank.Length - 1);
+                    if (take >= previous) take++;
+                }
+                else take = soundRandom.Next(bank.Length);
+                lastTake[id] = take;
+                clip = bank[take];
+                // Keep pickup notes and their chain progression in tune.
+                if (id != SfxId.Gem) pitch *= SoundRange(0.97f, 1.03f);
+                volume *= SoundRange(0.9f, 1f);
+            }
+            var v = voices[slot];
+            v.Stop();
+            v.clip = clip;
+            v.pitch = Mathf.Clamp(pitch, 0.25f, 3f);
+            voiceGains[slot] = Mathf.Clamp01(volume);
+            v.volume = Volume * voiceGains[slot];
+            v.priority = cue ? 50 : 128;
+            // One clip per source: reusing a busy PlayOneShot source can stack sounds
+            // and change the pitch of a previous sound still playing on that source.
+            v.Play();
+        }
+
+        private int FindVoice(bool cue)
+        {
+            int count = cue ? CueVoices : voices.Length - CueVoices;
+            int start = cue ? voices.Length - CueVoices : 0;
+            int cursor = cue ? nextCue : next;
+            for (int i = 0; i < count; i++)
+            {
+                int index = (cursor + i) % count;
+                if (voices[start + index].isPlaying) continue;
+                if (cue) nextCue = (index + 1) % count;
+                else next = (index + 1) % count;
+                return start + index;
+            }
+            if (!cue) return -1;
+            nextCue = (cursor + 1) % count;
+            return start + cursor;
+        }
+
+        public void PlayEnemyCry(Enemy enemy) => cries?.Play(enemy);
+        public void StopEnemyCries() => cries?.Clear();
+        private void LateUpdate() => cries?.Tick();
+
+        private void OnDestroy()
+        {
+            cries?.Dispose();
+            foreach (var clip in generated) if (clip != null) Destroy(clip);
+        }
+
+        private float SoundRange(float min, float max) => Mathf.Lerp(min, max, (float)soundRandom.NextDouble());
+
+        private void AddVariations(SfxId id, float duration, System.Func<float, float, int, float> sample)
+        {
+            var bank = new AudioClip[4];
+            bank[0] = clips[id];
+            for (int i = 1; i < bank.Length; i++)
+            {
+                int take = i;
+                bank[i] = Make(id + " take " + take, duration, (t, n) => sample(t, n, take));
+            }
+            variations[id] = bank;
+        }
+
+        private static float DrySnap(float t, float noise, int take)
+        {
+            float crack = Env(t, 0.0007f, 90f + take * 9f);
+            for (int i = 1; i <= 3 + take; i++)
+            {
+                float local = t - i * (0.008f + take * 0.002f);
+                if (local >= 0f) crack += Env(local, 0.0005f, 190f) * (0.5f - i * 0.045f);
+            }
+            return noise * crack * 0.7f
+                + Mathf.Sin(2 * Mathf.PI * (1350f + take * 190f) * t) * Env(t, 0.0007f, 65f) * 0.13f;
         }
 
         private static float Env(float t, float attack, float decay) => Mathf.Min(1f, t / attack) * Mathf.Exp(-t * decay);
@@ -98,7 +223,7 @@ namespace PastaSurvivors
             return (Sq(t * f) * 0.3f + Mathf.Sin(2 * Mathf.PI * f * t) * 0.7f) * Env(lt, 0.003f, i == notes.Length - 1 ? 4f : 10f);
         }
 
-        private static AudioClip Make(string name, float duration, System.Func<float, float, float> f)
+        private AudioClip Make(string name, float duration, System.Func<float, float, float> f)
         {
             int n = Mathf.CeilToInt(duration * Rate);
             var data = new float[n];
@@ -112,6 +237,7 @@ namespace PastaSurvivors
             }
             var clip = AudioClip.Create(name, n, 1, Rate, false);
             clip.SetData(data, 0);
+            generated.Add(clip);
             return clip;
         }
     }

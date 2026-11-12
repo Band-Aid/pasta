@@ -76,6 +76,7 @@ namespace PastaSurvivors
         public readonly List<Road> roads = new List<Road>();
         public readonly List<District> districts = new List<District>();
         private readonly List<BridgeSurface> bridges = new List<BridgeSurface>();
+        private readonly List<(Rect bounds, string text)> routeHints = new List<(Rect, string)>();
         /// <summary>Pedestals where special weapons appear.</summary>
         public readonly List<Vector3> specialSpots = new List<Vector3>();
         public bool ashRain;
@@ -94,6 +95,16 @@ namespace PastaSurvivors
         {
             var point = new Vector2(p.x, p.z);
             foreach (var d in districts) if (d.bounds.Contains(point)) return d;
+            return null;
+        }
+
+        // Guidance at a junction does not change the district's wave modifiers.
+        public void AddRouteHint(Rect bounds, string text) => routeHints.Add((bounds, text));
+
+        public string RouteHintAt(Vector3 p)
+        {
+            var point = new Vector2(p.x, p.z);
+            foreach (var hint in routeHints) if (hint.bounds.Contains(point)) return hint.text;
             return null;
         }
 

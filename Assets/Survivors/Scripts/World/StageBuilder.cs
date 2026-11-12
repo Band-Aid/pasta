@@ -18,6 +18,27 @@ namespace PastaSurvivors
         private static readonly Color Iron = new Color(0.16f, 0.16f, 0.17f);
         private static readonly Color Leaf = new Color(0.25f, 0.5f, 0.2f);
         private static readonly Color Glass = new Color(0.2f, 0.26f, 0.32f);
+        private static readonly Color ShortcutMark = new Color(0.92f, 0.68f, 0.25f);
+        private static readonly Color DetourMark = new Color(0.3f, 0.68f, 0.6f);
+
+        // Shared by the paving and the opt-in checks against the generated collision arena.
+        public static readonly Vector2[] RomaNorthShortcut = { new Vector2(-79f, 76f), new Vector2(79f, 76f) };
+        public static readonly Vector2[] RomaNorthDetour =
+        {
+            new Vector2(-79f, 76f), new Vector2(-79f, 116f), new Vector2(-54f, 116f),
+            new Vector2(-30f, 106f), new Vector2(-6f, 116f), new Vector2(18f, 106f),
+            new Vector2(42f, 116f), new Vector2(66f, 106f), new Vector2(79f, 106f), new Vector2(79f, 76f)
+        };
+        public static readonly Vector2[] RomaOrchardShortcut =
+        {
+            new Vector2(120f, -54f), new Vector2(120f, -123f), new Vector2(116f, -123f)
+        };
+        public static readonly Vector2[] RomaOrchardDetour =
+        {
+            new Vector2(120f, -54f), new Vector2(138f, -54f), new Vector2(138f, -74f),
+            new Vector2(100f, -74f), new Vector2(100f, -97f), new Vector2(120f, -97f),
+            new Vector2(120f, -123f), new Vector2(116f, -123f)
+        };
 
         private static float R(float a, float b) => a + (float)rng.NextDouble() * (b - a);
         private static T Pick<T>(T[] arr) => arr[rng.Next(arr.Length)];
@@ -373,6 +394,33 @@ namespace PastaSurvivors
             arena.AddWall(c - off, railSize, false);
         }
 
+        /// <summary>Ground markings only; collision and shelter come from the actual walls and hedges.</summary>
+        private static void Footpath(bool detour, params Vector2[] points)
+        {
+            for (int i = 1; i < points.Length; i++)
+            {
+                var delta = points[i] - points[i - 1];
+                float length = delta.magnitude;
+                if (length < 0.01f) continue;
+                var mid = (points[i] + points[i - 1]) * 0.5f;
+                kit.Frame = Matrix4x4.TRS(new Vector3(mid.x, 0f, mid.y),
+                    Quaternion.LookRotation(new Vector3(delta.x, 0f, delta.y)), Vector3.one);
+                kit.Box(new Vector3(0f, 0.055f, 0f), new Vector3(4f, 0.02f, length), new Color(0.78f, 0.75f, 0.65f));
+                if (detour)
+                {
+                    foreach (float x in new[] { -1.5f, 1.5f })
+                        kit.Box(new Vector3(x, 0.08f, 0f), new Vector3(0.18f, 0.02f, length), DetourMark);
+                }
+                else
+                    for (float z = -length * 0.5f; z < length * 0.5f; z += 4f)
+                    {
+                        float dash = Mathf.Min(2f, length * 0.5f - z);
+                        kit.Box(new Vector3(0f, 0.08f, z + dash * 0.5f), new Vector3(0.3f, 0.02f, dash), ShortcutMark);
+                    }
+                kit.Frame = Matrix4x4.identity;
+            }
+        }
+
         private static void BridgeStrip(Arena.BridgeSurface surface, float near, float far, float bottom, float top, Color color)
         {
             for (int i = 0; i < Arena.BridgeSurface.Segments; i++)
@@ -722,7 +770,7 @@ namespace PastaSurvivors
         {
             arena.AddDistrict(new Rect(-150, 82, 66, 54), "ピンチョの別荘庭園", "木陰を回り込み、井戸で立て直そう", new Color(0.46f, 0.68f, 0.46f), 0.65f, 1.6f,
                 (EnemyKind.Mamma, 0.5f), (EnemyKind.Vespista, 0.4f));
-            arena.AddDistrict(new Rect(-76, 82, 152, 54), "古代水道橋の回廊", "柱から柱へ移り、投擲をかわそう", new Color(0.64f, 0.67f, 0.7f), 0.95f, 1.1f,
+            arena.AddDistrict(new Rect(-76, 82, 152, 54), "古代水道橋の回廊", "南の黄の道は近道。緑の柱道で射線を切ろう", new Color(0.64f, 0.67f, 0.7f), 0.95f, 1.1f,
                 (EnemyKind.Mamma, 1.8f), (EnemyKind.Chef, 1.4f));
             arena.AddDistrict(new Rect(84, 82, 66, 54), "コロッセオ闘技場", "群れをまとめて迎撃、柱の外へ退避", new Color(0.83f, 0.5f, 0.32f), 1.3f, 0.8f,
                 (EnemyKind.Chef, 2f), (EnemyKind.Tifoso, 2f), (EnemyKind.Mamma, 0.5f));
@@ -734,7 +782,7 @@ namespace PastaSurvivors
                 (EnemyKind.Chef, 1.6f), (EnemyKind.Vespista, 0.5f));
             arena.AddDistrict(new Rect(-76, -136, 152, 60), "チルコ・マッシモ", "中央の長い壁を回り、突進をいなそう", new Color(0.8f, 0.67f, 0.4f), 1.15f, 0.9f,
                 (EnemyKind.Vespista, 2.5f), (EnemyKind.Tifoso, 1.8f));
-            arena.AddDistrict(new Rect(84, -136, 66, 89), "アヴェンティーノの果樹園", "木立を抜け、朝市と井戸で補給", new Color(0.65f, 0.72f, 0.34f), 0.8f, 1.25f,
+            arena.AddDistrict(new Rect(84, -136, 66, 89), "アヴェンティーノの果樹園", "黄の直線は突進に注意。緑の曲がり道で朝市へ", new Color(0.65f, 0.72f, 0.34f), 0.8f, 1.25f,
                 (EnemyKind.Vespista, 1.7f), (EnemyKind.Mamma, 0.8f));
 
             // A clear inner belt joins every outer district, with north/south links on both sides of the city.
@@ -775,6 +823,13 @@ namespace PastaSurvivors
                     kit.Box(new Vector3(x, 7.85f, z), new Vector3(12f, 0.8f, 3.6f), Stone);
                 }
             }
+            // The open promenade stays straight; the arcade route trades distance for real cover.
+            // Alternating baffles leave wide exits between the two rows of piers.
+            for (int i = 0; i < 6; i++)
+                StoneWall(new Vector3(-54f + i * 24f, 0f, i % 2 == 0 ? 107f : 115f), new Vector2(1.2f, 12f), 1.8f);
+            Footpath(false, RomaNorthShortcut);
+            Footpath(true, RomaNorthDetour);
+            arena.AddRouteHint(new Rect(-88f, 70f, 176f, 58f), "黄の直線は近道。北の緑の柱道は壁で射線を切る");
             Pedestal(new Vector3(0f, 0f, 111f));
             Flush(root, "Aqueduct arcades");
 
@@ -834,12 +889,24 @@ namespace PastaSurvivors
             Pedestal(new Vector3(0f, 0f, -127f));
             Flush(root, "Circus circuit");
 
-            // Orange orchard: staggered hedges and tree trunks break charges; a morning market rewards the detour.
+            // Orange orchard: a straight gap admits Vespa charges; the longer route turns behind hedges.
             kit.Box(new Vector3(117f, 0.02f, -92f), new Vector3(62f, 0.03f, 86f), new Color(0.55f, 0.6f, 0.35f));
             foreach (float x in new[] { 96f, 112f, 128f, 144f })
                 foreach (float z in new[] { -58f, -80f, -103f }) RomaTree(new Vector3(x, 0f, z), true);
-            Hedge(new Vector3(112f, 0f, -69f), new Vector2(40f, 1.2f));
-            Hedge(new Vector3(126f, 0f, -89f), new Vector2(40f, 1.2f));
+            // Side hedges prevent an unprotected strip outside the orchard from beating both designed routes.
+            // North and south remain connected to the city; the northern opening is the shared route choice.
+            Hedge(new Vector3(87f, 0f, -91f), new Vector2(1.2f, 82f));
+            Hedge(new Vector3(149f, 0f, -91f), new Vector2(1.2f, 82f));
+            Hedge(new Vector3(101.5f, 0f, -50f), new Vector2(29f, 1.2f));
+            Hedge(new Vector3(136.5f, 0f, -50f), new Vector2(25f, 1.2f));
+            // Both transverse hedges have a 6 m opening centred on x=120.
+            Hedge(new Vector3(104.5f, 0f, -69f), new Vector2(25f, 1.2f));
+            Hedge(new Vector3(127.5f, 0f, -69f), new Vector2(9f, 1.2f));
+            Hedge(new Vector3(111.5f, 0f, -89f), new Vector2(11f, 1.2f));
+            Hedge(new Vector3(134.5f, 0f, -89f), new Vector2(23f, 1.2f));
+            Footpath(false, RomaOrchardShortcut);
+            Footpath(true, RomaOrchardDetour);
+            arena.AddRouteHint(new Rect(108f, -64f, 34f, 18f), "朝市へ：黄は直進・突進に注意。緑は生垣を回る");
             MarketArea(new Vector3(116f, 0f, -120f), 14f, "果樹園の朝市");
             foreach (float x in new[] { 104f, 128f }) StallRow(new Vector3(x, 0f, -120f), new Vector2(2f, 12f));
             WellHead(new Vector3(145f, 0f, -132f));

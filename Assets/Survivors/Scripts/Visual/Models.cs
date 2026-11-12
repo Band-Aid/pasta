@@ -201,6 +201,9 @@ namespace PastaSurvivors
             kit.Clear();
             switch (kind)
             {
+                case ShotKind.CheeseWheel:
+                    CheeseWheelGeometry();
+                    break;
                 case ShotKind.Penne:
                     {
                         // Penne rigate: a ridged tube, both ends cut on the same diagonal, hollow inside.
@@ -297,6 +300,20 @@ namespace PastaSurvivors
                     kit.Ball(Vector3.zero, 0.42f, new Color(0.45f, 0.24f, 0.14f));
                     kit.Ball(new Vector3(0, 0.12f, 0), new Vector3(0.3f, 0.2f, 0.3f), Tomato);
                     break;
+                case ShotKind.SaucePot:
+                    {
+                        var metal = new Color(0.55f, 0.59f, 0.63f);
+                        kit.Cone(new Vector3(0f, 0.25f, 0f), new Vector3(0.8f, 0.5f, 0.8f), metal, default, 0.9f, 16);
+                        kit.Cyl(new Vector3(0f, 0.5f, 0f), new Vector3(0.82f, 0.08f, 0.82f), new Color(0.85f, 0.87f, 0.9f), default, 16);
+                        kit.Cyl(new Vector3(0f, 0.55f, 0f), new Vector3(0.7f, 0.035f, 0.7f), Tomato, default, 16);
+                        foreach (float side in new[] { -1f, 1f })
+                        {
+                            kit.Bar(new Vector3(side * 0.35f, 0.4f, -0.14f), new Vector3(side * 0.62f, 0.4f, -0.14f), 0.08f, metal);
+                            kit.Bar(new Vector3(side * 0.62f, 0.4f, -0.14f), new Vector3(side * 0.62f, 0.4f, 0.14f), 0.08f, metal);
+                            kit.Bar(new Vector3(side * 0.62f, 0.4f, 0.14f), new Vector3(side * 0.35f, 0.4f, 0.14f), 0.08f, metal);
+                        }
+                        break;
+                    }
                 case ShotKind.Bazooka:
                     {
                         // A fat bundle of dried spaghetti, ends a little uneven, tied with red kitchen string.
@@ -359,6 +376,13 @@ namespace PastaSurvivors
                     for (int i = 0; i < 5; i++)
                         kit.Cone(new Vector3(0, 0.4f, 0), new Vector3(0.12f, 0.35f, 0.12f), Basil, new Vector3(25f, i * 72f, 0f), 0f);
                     break;
+                case "special_CheeseWheel":
+                    {
+                        var wheel = Shot(ShotKind.CheeseWheel);
+                        kit.Clear();
+                        Reuse(wheel, Matrix4x4.Scale(Vector3.one * 0.4f));
+                        break;
+                    }
                 case "gem1": Gem(new Color(1f, 0.82f, 0.3f), 0.32f); break;
                 case "gem2": Gem(new Color(0.35f, 0.9f, 0.35f), 0.4f); break;
                 case "gem3": Gem(new Color(1f, 0.3f, 0.25f), 0.5f); break;
@@ -522,6 +546,33 @@ namespace PastaSurvivors
             mesh = kit.ToMesh(key);
             misc[key] = mesh;
             return mesh;
+        }
+
+        /// <summary>A whole cheese wheel on its edge, axle along X, ready to roll along Z.</summary>
+        private static void CheeseWheelGeometry()
+        {
+            var rind = new Color(0.86f, 0.53f, 0.14f);
+            var cheese = new Color(1f, 0.87f, 0.42f);
+            var hole = new Color(0.68f, 0.38f, 0.08f);
+            var axle = new Vector3(0f, 0f, 90f);
+            kit.Cyl(Vector3.zero, new Vector3(2f, 0.7f, 2f), rind, axle, 24);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                kit.Cyl(new Vector3(side * 0.36f, 0f, 0f), new Vector3(1.85f, 0.03f, 1.85f), cheese, axle, 24);
+                for (int i = 0; i < 9; i++)
+                {
+                    float angle = i * 2.39996f, radius = 0.2f + (i % 3) * 0.24f;
+                    var center = new Vector3(side * 0.38f, Mathf.Cos(angle) * radius, Mathf.Sin(angle) * radius);
+                    kit.Cyl(center, new Vector3(0.13f + (i % 2) * 0.06f, 0.012f, 0.1f + (i % 3) * 0.02f), hole, axle, 10);
+                }
+            }
+            // Uneven marks on the rind make its accelerating spin readable from above as well as the side.
+            for (int i = 0; i < 12; i++)
+            {
+                float angle = i * 30f * Mathf.Deg2Rad;
+                kit.Box(new Vector3(0f, Mathf.Cos(angle), Mathf.Sin(angle)), new Vector3(0.52f, 0.02f, 0.07f),
+                    i % 3 == 0 ? hole : cheese, new Vector3(i * 30f, 0f, 0f));
+            }
         }
 
         /// <summary>

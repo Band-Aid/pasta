@@ -195,11 +195,11 @@ namespace PastaSurvivors
             bool armed = UnityEngine.Time.unscaledTime >= armedAt;
             var nav = Controls.Nav();
             int prev = index;
-            if (nav.x != 0 && columns > 1) index = Mathf.Clamp(index + nav.x, 0, items.Count - 1);
+            if (nav.x != 0 && columns > 1 && items[index].adjust == null) index = Mathf.Clamp(index + nav.x, 0, items.Count - 1);
             if (nav.y != 0) index = Mathf.Clamp(index - nav.y * columns, 0, items.Count - 1);
             if (nav.y != 0 && columns == 1 && prev == index)
                 index = (index - nav.y + items.Count) % items.Count;
-            if (armed && nav.x != 0 && columns == 1) items[index].adjust?.Invoke(nav.x);
+            if (armed && nav.x != 0) items[index].adjust?.Invoke(nav.x);
             var mouse = Controls.MousePosition;
             bool hovering = false;
             for (int i = 0; i < items.Count; i++)

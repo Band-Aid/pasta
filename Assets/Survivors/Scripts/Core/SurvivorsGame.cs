@@ -87,6 +87,7 @@ namespace PastaSurvivors
         private void ClearRun()
         {
             StopAllCoroutines();
+            G.Sfx.StopEnemyCries();
             G.Enemies.Clear();
             G.Hazards.Clear();
             G.Shots.Clear();

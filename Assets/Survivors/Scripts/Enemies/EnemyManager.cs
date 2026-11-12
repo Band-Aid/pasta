@@ -79,7 +79,9 @@ namespace PastaSurvivors
             e.speedMul = 1f;
             e.knock = Vector3.zero;
             e.stun = e.slow = e.buff = e.flash = e.fear = 0f;
+            e.bossCcCooldown = 0f;
             e.slip = e.slipCooldown = 0f;
+            e.flattened = 0f;
             e.state = 0; e.pattern = -1; e.volleys = 0;
             e.stateTimer = def.IsBoss ? 2.5f : 0f;
             e.attackTimer = UnityEngine.Random.Range(0.5f, def.attackCooldown);
@@ -172,6 +174,7 @@ namespace PastaSurvivors
             for (int i = Active.Count - 1; i >= 0; i--)
             {
                 var e = Active[i];
+                if (!e.frozen) e.flattened = Mathf.Max(0f, e.flattened - dt);
                 if (e.fleeing)
                 {
                     TickFlee(e, dt);
@@ -188,6 +191,7 @@ namespace PastaSurvivors
                 e.flash -= dt;
                 e.SetFlash(e.flash > 0f);
                 e.stun -= dt; e.slow -= dt; e.buff -= dt; e.attackTimer -= dt; e.fear -= dt;
+                e.bossCcCooldown = Mathf.Max(0f, e.bossCcCooldown - dt);
                 e.slip -= dt; e.slipCooldown -= dt;
                 e.rageCooldown -= dt;
 
@@ -208,7 +212,7 @@ namespace PastaSurvivors
                     var flow = G.Arena.FlowDir(e.pos);
                     e.nav = flow.sqrMagnitude > 0.01f ? flow : dirP;
                 }
-                float speed = e.def.speed * e.speedMul * (e.slow > 0f ? 0.55f : 1f) * (e.buff > 0f ? 1.4f : 1f);
+                float speed = e.def.speed * e.speedMul * e.CcSpeedMultiplier * (e.buff > 0f ? 1.4f : 1f);
 
                 if (e.dominoTime > 0f)
                 {
@@ -216,6 +220,8 @@ namespace PastaSurvivors
                 }
                 else if (e.stun > 0f)
                 {
+                    // Combat CC uses ApplyStun: a boss only reaches this branch for
+                    // the one-off, scripted wait when its second form appears.
                     move = Vector3.zero;
                 }
                 else if (e.rageTime > 0f)
@@ -260,7 +266,7 @@ namespace PastaSurvivors
                 else if (e.state != 2 && dist > 0.1f) e.facing = Vector3.Slerp(e.facing, dirP, 1f - Mathf.Exp(-6f * dt));
 
                 // Contact damage.
-                if (player != null && e.dominoTime <= 0f && e.rageTime <= 0f && dist < e.radius + pr + 0.05f) player.TakeDamage(e.damage, e.pos, (e.state == 2 ? "charge:" : "touch:") + e.def.kind);
+                if (player != null && e.flattened <= 0f && e.dominoTime <= 0f && e.rageTime <= 0f && dist < e.radius + pr + 0.05f) player.TakeDamage(e.damage, e.pos, (e.state == 2 ? "charge:" : "touch:") + e.def.kind);
 
                 // Stragglers get recycled ahead of the player (Vampire Survivors style).
                 if (!e.IsBoss && !e.IsElite && dist > 44f && G.Waves != null)
@@ -283,11 +289,6 @@ namespace PastaSurvivors
             e.facing = e.fleeDir;
             e.lift = Mathf.Abs(Mathf.Sin(e.fleeT * 14f)) * 0.25f;
             float life = e.IsBoss ? 2.2f : 1.0f;
-            if (e.fleeT > life - 0.25f)
-            {
-                float k = Mathf.Clamp01((life - e.fleeT) / 0.25f);
-                e.rig.root.localScale = Vector3.one * e.scale * k;
-            }
             e.ApplyTransform();
             e.Animate(dt, 6f);
             if (e.fleeT >= life)
@@ -339,10 +340,33 @@ namespace PastaSurvivors
 
         private static readonly string[] SlipShouts = { "Maionese?!", "Scivolo!", "Sulla pizza no!", "Mamma mia!" };
 
+        /// <summary>Weapon/zone CC enters here; bosses slow down without pausing their attack state machine.</summary>
+        public void ApplyStun(Enemy e, float duration)
+        {
+            if (!e.active || e.fleeing || e.IsProp || duration <= 0f) return;
+            if (e.IsBoss) { ApplySlow(e, duration); return; }
+            e.stun = Mathf.Max(e.stun, duration);
+        }
+
+        public void ApplySlow(Enemy e, float duration)
+        {
+            if (!e.active || e.fleeing || e.IsProp || duration <= 0f) return;
+            if (e.IsBoss)
+            {
+                // All CC sources share the same window. Hits during the slow or its
+                // recovery cannot extend it, stack it or postpone the next attack.
+                if (e.bossCcCooldown > 0f) return;
+                e.slow = Mathf.Min(duration, e.def.bossCcMaxDuration);
+                e.bossCcCooldown = e.slow + e.def.bossCcRecovery;
+                return;
+            }
+            e.slow = Mathf.Max(e.slow, duration);
+        }
+
         /// <summary>Mayonnaise underfoot: the Italian skids, lands on their back and lies there for a moment.</summary>
         public void Slip(Enemy e)
         {
-            if (!e.active || e.IsBoss || e.IsProp || e.fleeing || e.slipCooldown > 0f) return;
+            if (!e.active || e.IsBoss || e.IsProp || e.fleeing || e.flattened > 0f || e.slipCooldown > 0f) return;
             e.InterruptApproachGesture();
             e.slip = Enemy.SlipTime;
             e.slipCooldown = Enemy.SlipTime + 0.8f;
@@ -351,9 +375,28 @@ namespace PastaSurvivors
             if (UnityEngine.Random.value < 0.5f) ShoutCustom(e, SlipShouts[UnityEngine.Random.Range(0, SlipShouts.Length)], new Color(1f, 0.95f, 0.7f));
         }
 
+        /// <summary>A wheel irons ordinary Italians flat; defeated ones slide away as paper instead of popping upright.</summary>
+        public void Flatten(Enemy e, Vector3 dir)
+        {
+            if (!e.active || e.IsBoss || e.IsProp) return;
+            e.InterruptApproachGesture();
+            e.flattened = Enemy.FlattenTime;
+            e.flattenDir = dir;
+            e.stun = Mathf.Max(e.stun, Enemy.FlattenTime);
+            e.slip = e.fear = e.dominoTime = e.spin = e.lift = 0f;
+            e.rageTime = e.rageWindup = 0f;
+            e.dominoVel = Vector3.zero;
+            e.state = 0;
+            e.knock += dir * 8f;
+            if (e.fleeing) e.fleeDir = dir;
+            e.Animate(0.001f, 0f);
+            e.ApplyTransform();
+            ShoutCustom(e, "ぺちゃんこ!!", new Color(1f, 0.9f, 0.5f));
+        }
+
         public void Launch(Enemy e, Vector3 velocity, float damage)
         {
-            if (e.IsBoss || e.IsProp || e.fleeing) return;
+            if (e.IsBoss || e.IsProp || e.fleeing || e.flattened > 0f) return;
             e.InterruptApproachGesture();
             e.rageTime = 0f;
             e.dominoVel = velocity;
@@ -363,7 +406,7 @@ namespace PastaSurvivors
 
         public void Enrage(Enemy e, Vector3 direction, float damage, int slot)
         {
-            if (!e.Targetable || e.IsBoss || e.rageCooldown > 0f || e.dominoTime > 0f) return;
+            if (!e.Targetable || e.IsBoss || e.flattened > 0f || e.rageCooldown > 0f || e.dominoTime > 0f) return;
             direction.y = 0f;
             if (direction.sqrMagnitude < 0.001f) direction = e.facing;
             e.InterruptApproachGesture();
@@ -399,7 +442,7 @@ namespace PastaSurvivors
                 if (other == e || other.IsProp || other.immune[Enemy.SlotDomino] > now) continue;
                 other.immune[Enemy.SlotDomino] = now + 0.45f;
                 Damage(other, e.rageDamage, e.rageDir, 6f, e.rageSlot);
-                other.stun = Mathf.Max(other.stun, 0.25f);
+                ApplyStun(other, 0.25f);
             }
             return e.rageDir * 13f;
         }
@@ -528,14 +571,16 @@ namespace PastaSurvivors
 
         // ---------------- bosses ----------------
 
-        private enum BossMove { Fan, Radial, Charge, Summon, Sweep, Ride, Stampede }
+        private enum BossMove { Fan, Radial, Charge, Summon, Sweep, Ride, Stampede, SaucePot }
+        private const float SauceRadius = 2.4f, SauceWarning = 1.35f, SauceDuration = 4f;
+        private const float SauceStepOut = 0.65f, SauceChargeWarning = 1f;
         private static readonly string[] RideShouts = { "Drin drin!", "Permesso!", "Largo, largo!" };
 
         private static BossMove[] Moves(EnemyKind kind)
         {
             switch (kind)
             {
-                case EnemyKind.BossNonna: return new[] { BossMove.Fan, BossMove.Summon, BossMove.Charge, BossMove.Fan, BossMove.Charge };
+                case EnemyKind.BossNonna: return new[] { BossMove.Fan, BossMove.SaucePot, BossMove.Charge, BossMove.Summon, BossMove.Fan, BossMove.Charge };
                 case EnemyKind.BossCapitano: return new[] { BossMove.Sweep, BossMove.Charge, BossMove.Summon, BossMove.Sweep, BossMove.Radial };
                 case EnemyKind.BossBikeNonna: return new[] { BossMove.Ride, BossMove.Fan, BossMove.Ride, BossMove.Stampede, BossMove.Ride, BossMove.Radial };
                 default: return new[] { BossMove.Radial, BossMove.Summon, BossMove.Fan, BossMove.Charge, BossMove.Radial, BossMove.Fan };
@@ -559,10 +604,17 @@ namespace PastaSurvivors
                         e.state = 1;
                         e.lockDir = dirP;
                         e.volleys = 0;
-                        float wind = move == BossMove.Summon || move == BossMove.Stampede ? 0.6f : 0.9f * pace;
+                        float wind = move == BossMove.SaucePot ? SauceWarning
+                            : move == BossMove.Summon || move == BossMove.Stampede ? 0.6f : 0.9f * pace;
                         e.stateTimer = wind;
                         switch (move)
                         {
+                            case BossMove.SaucePot:
+                                if (dist > 18f || !TrySauceTarget(out var target)) { EndSauceMove(e, pace); return Vector3.zero; }
+                                e.volleys = enraged ? 1 : 0;
+                                G.Shots.CastBossSauce(e, target, SauceRadius, SauceWarning, SauceDuration);
+                                G.Fx.Shout(e.Center + Vector3.up * 3f, "ソース鍋！ 赤い円から離れろ！", new Color(1f, 0.6f, 0.25f));
+                                return Vector3.zero;
                             case BossMove.Charge: G.Fx.Telegraph(TeleShape.Lane, e.pos, dirP, 22f, e.radius * 2f, wind); break;
                             case BossMove.Ride:
                                 // A run of dashes, each one rung in with the bell and re-aimed at the player.
@@ -582,6 +634,7 @@ namespace PastaSurvivors
                         e.state = 2;
                         switch (move)
                         {
+                            case BossMove.SaucePot: e.stateTimer = SauceStepOut; break;
                             case BossMove.Fan: e.stateTimer = 0f; e.volleys = enraged ? 4 : 3; break;
                             case BossMove.Radial: e.stateTimer = 0f; e.volleys = enraged ? 3 : 2; break;
                             case BossMove.Charge: e.stateTimer = 1.3f; G.Sfx.Play(SfxId.Boss, 0.5f, 1.4f); G.Cam.Shake(0.3f); break;
@@ -607,11 +660,48 @@ namespace PastaSurvivors
                     }
                     return Vector3.zero;
                 default:
+                    if (move == BossMove.SaucePot)
+                    {
+                        if (e.state == 2 && e.stateTimer <= 0f)
+                        {
+                            // The later-half combo aims only after the player has had time to leave the sauce.
+                            if (e.volleys > 0 && HasSauceChargeEscape(e, dirP))
+                            {
+                                e.volleys = 0;
+                                e.lockDir = dirP;
+                                e.state = 3;
+                                e.stateTimer = SauceChargeWarning;
+                                G.Fx.Telegraph(TeleShape.Lane, e.pos, dirP, 22f, e.radius * 2f, SauceChargeWarning);
+                                G.Sfx.Play(SfxId.Boss, 0.45f, 1.1f);
+                            }
+                            else EndSauceMove(e, pace);
+                        }
+                        else if (e.state == 3)
+                        {
+                            e.facing = e.lockDir;
+                            if (e.stateTimer <= 0f)
+                            {
+                                e.state = 4;
+                                e.stateTimer = 1.3f;
+                                G.Sfx.Play(SfxId.Boss, 0.5f, 1.4f);
+                                G.Cam.Shake(0.3f);
+                            }
+                        }
+                        else if (e.state == 4)
+                        {
+                            e.facing = e.lockDir;
+                            if (e.stateTimer <= 0f || !G.Arena.Inside(e.pos, e.radius + 0.5f)
+                                || G.Arena.Blocked(e.pos + e.lockDir * (e.radius + 0.4f), 0.05f))
+                            { EndSauceMove(e, pace); return Vector3.zero; }
+                            return e.lockDir * (enraged ? 16f : 13f) * e.CcSpeedMultiplier;
+                        }
+                        return Vector3.zero;
+                    }
                     if (move == BossMove.Charge)
                     {
                         e.facing = e.lockDir;
                         if (e.stateTimer <= 0f || !G.Arena.Inside(e.pos, e.radius + 0.5f) || G.Arena.Blocked(e.pos + e.lockDir * (e.radius + 0.4f), 0.05f)) { EndBossMove(e, pace); return Vector3.zero; }
-                        return e.lockDir * (enraged ? 16f : 13f);
+                        return e.lockDir * (enraged ? 16f : 13f) * e.CcSpeedMultiplier;
                     }
                     if (move == BossMove.Ride)
                     {
@@ -627,7 +717,7 @@ namespace PastaSurvivors
                             RideTelegraph(e, dirP, e.stateTimer);
                             return Vector3.zero;
                         }
-                        return e.lockDir * (enraged ? 18f : 15f);
+                        return e.lockDir * (enraged ? 18f : 15f) * e.CcSpeedMultiplier;
                     }
                     if (move == BossMove.Fan || move == BossMove.Radial)
                     {
@@ -679,6 +769,55 @@ namespace PastaSurvivors
             e.stateTimer = UnityEngine.Random.Range(1.6f, 2.6f) * pace;
         }
 
+        private static bool TrySauceTarget(out Vector3 target)
+        {
+            target = Vector3.zero;
+            var player = G.Player;
+            if (player == null) return false;
+            target = G.Arena.OnGround(player.Position); // Lock now, never chase the player during the warning.
+            float exitDistance = SauceRadius + player.Radius + 0.75f;
+            for (int i = 0; i < 16; i++)
+            {
+                var direction = Quaternion.Euler(0f, i * 22.5f, 0f) * Vector3.forward;
+                var exit = player.Position + direction * exitDistance;
+                if (ClearSauceEscape(player.Position, exit, player.Radius)) return true;
+            }
+            return false;
+        }
+
+        private static bool HasSauceChargeEscape(Enemy e, Vector3 direction)
+        {
+            var player = G.Player;
+            if (player == null || G.Shots.InBossSauce(player.Position, player.Radius)) return false;
+            var delta = player.Position - e.pos; delta.y = 0f;
+            float distance = delta.magnitude;
+            if (distance > 20f || distance < e.radius + player.Radius + 0.5f) return false;
+            if (!G.Arena.WalkClear(e.pos, e.pos + direction * Mathf.Min(distance, 12f), e.radius)) return false;
+            var side = Vector3.Cross(Vector3.up, direction).normalized * 4f;
+            return ClearSauceEscape(player.Position, player.Position + side, player.Radius)
+                || ClearSauceEscape(player.Position, player.Position - side, player.Radius);
+        }
+
+        private static bool ClearSauceEscape(Vector3 from, Vector3 to, float radius)
+        {
+            if (!G.Arena.Inside(to, radius + 0.1f) || !G.Arena.WalkClear(from, to, radius)) return false;
+            // Check small props too, and do not route a dodge through an existing sauce patch.
+            int steps = Mathf.CeilToInt(Vector3.Distance(from, to) / 0.25f);
+            for (int i = 1; i <= steps; i++)
+            {
+                var p = Vector3.Lerp(from, to, i / (float)steps);
+                if (G.Arena.Blocked(p, radius) || G.Shots.InBossSauce(p, radius)) return false;
+            }
+            return true;
+        }
+
+        private static void EndSauceMove(Enemy e, float pace)
+        {
+            EndBossMove(e, pace);
+            // No unannounced fan/summon/charge overlap while the floor is still hazardous.
+            e.stateTimer = Mathf.Max(e.stateTimer, G.Shots.BossSauceRemaining(e) + 0.7f);
+        }
+
         // ---------------- damage ----------------
 
         public void Damage(Enemy e, float amount, Vector3 dir, float knockback, int slot)
@@ -716,6 +855,7 @@ namespace PastaSurvivors
             }
             e.InterruptApproachGesture();
             e.fleeing = true;
+            if (e.flattened > 0f) e.flattened = Enemy.FlattenTime;
             e.fleeT = 0f;
             e.state = 0;
             e.dominoTime = 0f;
@@ -729,6 +869,7 @@ namespace PastaSurvivors
             e.fleeDir.y = 0; e.fleeDir.Normalize();
             e.knock = dir.sqrMagnitude > 0.001f ? dir.normalized * 3f : Vector3.zero;
             G.Pickups.DropGem(e.pos, e.def.xp);
+            G.Sfx.PlayEnemyCry(e);
             if (e.IsElite)
             {
                 G.Pickups.Drop(PickupKind.Chest, e.pos + e.fleeDir * -0.5f);
@@ -959,6 +1100,7 @@ namespace PastaSurvivors
             if (shoutBudget < 1f) return;
             shoutBudget -= 1f;
             G.Fx.Shout(e.Center + Vector3.up, text, color);
+            G.Sfx.PlayEnemyCry(e);
         }
 
         public void ShoutFrom(Enemy e)
@@ -966,6 +1108,7 @@ namespace PastaSurvivors
             if (shoutBudget < 1f) return;
             shoutBudget -= 1f;
             G.Fx.Shout(e.Center + Vector3.up, Shouts[UnityEngine.Random.Range(0, Shouts.Length)], Color.white);
+            G.Sfx.PlayEnemyCry(e);
         }
     }
 }

@@ -220,7 +220,8 @@ namespace PastaSurvivors
             var district = G.Arena.DistrictAt(p.Position);
             districtName.text = district != null ? district.name : "ローマの街路";
             districtName.color = district != null ? Color.Lerp(district.color, UiKit.Cream, 0.55f) : UiKit.Cream;
-            districtHint.text = district != null ? district.hint : "広場や泉へ抜ける道を探そう";
+            districtHint.text = G.Arena.RouteHintAt(p.Position)
+                ?? (district != null ? district.hint : "広場や泉へ抜ける道を探そう");
         }
 
         public void SetFirstPerson(bool on)

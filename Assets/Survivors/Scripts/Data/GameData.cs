@@ -41,10 +41,10 @@ namespace PastaSurvivors
 
     public enum Behavior { Chase, Thrower, Charger, Sweeper, Elite, Boss, Prop }
     public enum EnemyKind { Signore, Tifoso, Mamma, Chef, Vespista, Gondoliere, Pizzaiolo, Mafioso, Nonna, BossNonna, BossCapitano, BossDon, BossBikeNonna, Barrel }
-    public enum ShotKind { Penne, Fusilli, Farfalle, Ketchup, Pizza, Slipper, Dough, Meatball, Pineapple, Oar, Bazooka, Drop, Parmesan }
+    public enum ShotKind { Penne, Fusilli, Farfalle, Ketchup, Pizza, Slipper, Dough, Meatball, Pineapple, Oar, Bazooka, Drop, Parmesan, CheeseWheel, SaucePot }
 
     /// <summary>Special weapons: picked up on the map, fired manually, then cool down.</summary>
-    public enum SpecialId { Bazooka, MayoJet, Parmesan, Sprinkler, SugarEspresso, FrappeBeam }
+    public enum SpecialId { Bazooka, MayoJet, Parmesan, Sprinkler, SugarEspresso, FrappeBeam, CheeseWheel }
 
     public class SpecialDef
     {
@@ -61,6 +61,8 @@ namespace PastaSurvivors
         public int xp;
         public Behavior behavior;
         public ShotKind shot;
+        /// <summary>Combat CC becomes a short, non-refreshable slow, followed by full-speed recovery. Bosses only.</summary>
+        public float bossCcSpeedMultiplier = 0.8f, bossCcMaxDuration = 0.35f, bossCcRecovery = 1.25f;
         /// <summary>A boss that comes back as this kind when beaten instead of clearing the stage.</summary>
         public EnemyKind? nextPhase;
         /// <summary>Title-card line and banner shown when this boss arrives as a later phase.</summary>
@@ -283,6 +285,9 @@ namespace PastaSurvivors
             E(EnemyKind.BossNonna, "グランデ・ノンナ", 2200, 2.1f, 22, 200, Behavior.Boss, 1.5f, 2.9f, 1f, 14f, 3.4f, ShotKind.Slipper);
             // Grande Nonna's second form: beaten once, she grows wheels and comes back as a bicycle.
             E(EnemyKind.BossBikeNonna, "バイクばばぁ", 2400, 3.2f, 24, 250, Behavior.Boss, 1.5f, 2.2f, 1f, 14f, 3.0f, ShotKind.Slipper);
+            Enemies[EnemyKind.BossBikeNonna].bossCcSpeedMultiplier = 0.9f;
+            Enemies[EnemyKind.BossBikeNonna].bossCcMaxDuration = 0.2f;
+            Enemies[EnemyKind.BossBikeNonna].bossCcRecovery = 1.6f;
             Enemies[EnemyKind.BossNonna].nextPhase = EnemyKind.BossBikeNonna;
             Enemies[EnemyKind.BossBikeNonna].entranceLine = "“If my grandma had wheels, she would've been a bike.”<size=24>  — Gino D'Acampo</size>";
             Enemies[EnemyKind.BossBikeNonna].entranceBanner = "グランデ・ノンナに車輪が生えた！";
@@ -423,6 +428,8 @@ namespace PastaSurvivors
                     desc = "7秒間、移動速度+40%・全武器のクールダウン半減。" },
                 new SpecialDef { id = SpecialId.FrappeBeam, name = "フラペビーム", icon = "frappe", cooldown = 16f,
                     desc = "巨大フラペから、ホイップとキャラメルが渦巻く氷のビームを照射。甘すぎるコーヒーで頭がキーンとなったイタリア人は逃げ惑う。" },
+                new SpecialDef { id = SpecialId.CheeseWheel, name = "チーズホイール", icon = "cheesewheel", cooldown = 20f,
+                    desc = "巨大チーズが0.6秒スピンして、その瞬間に向いている方向へ猛突進。まとめてイタリア人を漫画のようにペラペラに潰す。壁で止まる。" },
             };
 
             Shop = new[]
