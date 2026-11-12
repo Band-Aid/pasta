@@ -181,6 +181,7 @@ namespace PastaSurvivors
             shot.knock = s.knockback;
             shot.spinRate = 900f;
             shot.scale = evolved ? 1.35f : 1f;
+            G.Shots.StyleWeapon(shot, WeaponColors.Penne, 0.12f, 0.16f);
             G.Sfx.Play(SfxId.Pop, 0.22f, Random.Range(1.3f, 1.6f));
         }
     }
@@ -203,14 +204,14 @@ namespace PastaSurvivors
             float radius = 3.3f * Area(s) * mul;
             Vector3 c = P.Position;
             P.Anim.Slam();
-            G.Fx.Slam(c, radius);
+            G.Fx.Slam(c, radius, true);
             G.Sfx.Play(SfxId.Slam, 0.8f, Random.Range(0.9f, 1.05f));
             G.Cam.Shake(0.28f);
             Ring(s, c, 0f, radius);
             if (evolved)
             {
-                Later(0.25f, () => { G.Fx.Slam(c, radius * 1.6f); Ring(Raw, c, radius * 0.9f, radius * 1.6f); });
-                Later(0.5f, () => { G.Fx.Slam(c, radius * 2.2f); Ring(Raw, c, radius * 1.5f, radius * 2.2f); G.Cam.Shake(0.3f); });
+                Later(0.25f, () => { G.Fx.Slam(c, radius * 1.6f, true); Ring(Raw, c, radius * 0.9f, radius * 1.6f); });
+                Later(0.5f, () => { G.Fx.Slam(c, radius * 2.2f, true); Ring(Raw, c, radius * 1.5f, radius * 2.2f); G.Cam.Shake(0.3f); });
             }
         }
 
@@ -254,6 +255,8 @@ namespace PastaSurvivors
                 var shot = G.Shots.Fire(ShotKind.Fusilli, Motion.Orbit, P.Position, Vector3.zero, Dmg(s), 0.55f, 1f, Slot);
                 shot.angle = k * Mathf.PI * 2f / n;
                 Configure(shot, s);
+                shot.tr.position = P.Position + new Vector3(Mathf.Cos(shot.angle), 0f, Mathf.Sin(shot.angle)) * shot.orbitRadius + Vector3.up * 0.9f;
+                G.Shots.StyleWeapon(shot, WeaponColors.Fusilli, 0.2f, 0.24f);
                 spinning.Add(shot);
             }
             G.Sfx.Play(SfxId.Whoosh, 0.4f, 1.4f);
@@ -289,7 +292,7 @@ namespace PastaSurvivors
                     var d = h.pos - f.pos; d.y = 0f;
                     if (d.sqrMagnitude > 1.1f * 1.1f) continue;
                     h.life = 0f;
-                    G.Fx.Burst(h.pos, Models.PastaGold, 6, 4f, 0.15f, FxKind.Crumb);
+                    G.Fx.WeaponBurst(h.pos, WeaponColors.Fusilli, 6, 4f, 0.15f);
                     G.Sfx.Play(SfxId.Pop, 0.4f, 0.8f);
                 }
             }
@@ -330,6 +333,7 @@ namespace PastaSurvivors
             shot.knock = s.knockback;
             shot.spinRate = 900f;
             shot.scale = 1.4f * area;
+            G.Shots.StyleWeapon(shot, WeaponColors.Farfalle, 0.22f, 0.28f);
             G.Sfx.Play(SfxId.Whoosh, 0.35f, 1.2f);
         }
     }
@@ -367,6 +371,7 @@ namespace PastaSurvivors
             var shot = G.Shots.Fire(ShotKind.Ketchup, Motion.Lob, P.Position + Vector3.up * 1.4f, Vector3.zero, 0f, 0.3f, 0.55f, Slot);
             shot.target = target;
             shot.spinRate = 900f;
+            G.Shots.StyleWeapon(shot, WeaponColors.Ketchup, 0.16f, 0.24f);
             float area = Area(s), dmg = Dmg(s), dur = Dur(s), kb = s.knockback;
             bool evo = evolved, sticky = IsMain;
             int slot = Slot;
@@ -381,11 +386,11 @@ namespace PastaSurvivors
                     G.Enemies.Damage(e, dmg * 2f, e.pos - x.target, kb, slot);
                     e.slow = Mathf.Max(e.slow, 1f);
                 }
-                G.Fx.Ring(x.target + Vector3.up * 0.1f, radius, new Color(1f, 0.25f, 0.1f, 0.8f), 0.3f, 0.5f);
-                var zone = G.Shots.Zone(x.target, radius, dmg, dur, 0.35f, slot, new Color(0.85f, 0.08f, 0.05f, 0.6f), 1f);
+                G.Fx.Ring(x.target + Vector3.up * 0.1f, radius, WeaponColors.WithAlpha(WeaponColors.Ketchup, 0.95f), 0.3f, 0.5f, true);
+                var zone = G.Shots.Zone(x.target, radius, dmg, dur, 0.35f, slot, WeaponColors.WithAlpha(WeaponColors.Ketchup, 0.65f), 1f);
                 zone.orbitSpeed = evo ? 1.8f : 0f;
                 zone.sticky = sticky;
-                G.Fx.Burst(x.target + Vector3.up * 0.2f, new Color(0.9f, 0.1f, 0.05f), 12, 5f, 0.18f, FxKind.Crumb);
+                G.Fx.WeaponBurst(x.target + Vector3.up * 0.2f, WeaponColors.Ketchup, 12, 5f, 0.18f);
                 G.Sfx.Play(SfxId.Splat, 0.45f, Random.Range(0.9f, 1.1f));
             };
         }
@@ -411,6 +416,7 @@ namespace PastaSurvivors
                 shot.spinRate = 400f;
                 shot.scale = 1.1f * area;
                 shot.enrages = Recipe != null && Recipe.id == RecipeId.PineapplePizza;
+                if (Recipe == null) G.Shots.StyleWeapon(shot, WeaponColors.Pizza, 0.2f, 0.3f);
                 if (evolved)
                 {
                     shot.explodeRadius = 2.3f * area;
