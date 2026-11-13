@@ -22,7 +22,7 @@ namespace PastaSurvivors
             public string key;
         }
 
-        private ParticleSystem crumbs, puffs, sparks;
+        private ParticleSystem crumbs, puffs, sparks, weaponCrumbs;
         private readonly List<Flat> active = new List<Flat>(64);
         private readonly Dictionary<string, Stack<Flat>> pools = new Dictionary<string, Stack<Flat>>();
         private readonly Dictionary<string, Mesh> meshes = new Dictionary<string, Mesh>();
@@ -41,6 +41,7 @@ namespace PastaSurvivors
             mpb = new MaterialPropertyBlock();
             var crumbMesh = new MeshKit().Box(Vector3.zero, new Vector3(0.6f, 0.6f, 1.6f), Color.white).ToMesh("Crumb");
             crumbs = MakeSystem("Crumbs", new Material(Mats.Lit), crumbMesh, 2.2f);
+            weaponCrumbs = MakeSystem("Weapon crumbs", Mats.FxAlpha, crumbMesh, 2.2f);
             puffs = MakeSystem("Puffs", Mats.Particles(false), null, -0.1f);
             sparks = MakeSystem("Sparks", Mats.Particles(true), null, 0f);
             aura = Models.Static(CreamDisc(), root, "Aura", Mats.FxAlpha, false);
@@ -179,6 +180,14 @@ namespace PastaSurvivors
         public void Burst(Vector3 pos, Color color, int count, float speed, float size, FxKind kind)
         {
             var ps = kind == FxKind.Crumb ? crumbs : kind == FxKind.Puff ? puffs : sparks;
+            EmitBurst(ps, pos, color, count, speed, size, kind);
+        }
+
+        public void WeaponBurst(Vector3 pos, Color color, int count, float speed, float size)
+            => EmitBurst(weaponCrumbs, pos, color, count, speed, size, FxKind.Crumb);
+
+        private void EmitBurst(ParticleSystem ps, Vector3 pos, Color color, int count, float speed, float size, FxKind kind)
+        {
             var ep = new ParticleSystem.EmitParams();
             for (int i = 0; i < count; i++)
             {
@@ -197,6 +206,7 @@ namespace PastaSurvivors
         public void Clear()
         {
             crumbs.Clear(); puffs.Clear(); sparks.Clear();
+            weaponCrumbs.Clear();
             foreach (var f in active) { f.go.SetActive(false); pools[f.key].Push(f); }
             active.Clear();
             aura.SetActive(false);
@@ -219,7 +229,7 @@ namespace PastaSurvivors
                     v.Add(new Vector3(Mathf.Cos(a) * k, 0f, Mathf.Sin(a) * k));
                     float swirl = 0.5f + 0.5f * Mathf.Sin(a * 3f + k * 9f);
                     float alpha = k >= 0.999f ? 0.3f : k >= 0.88f ? 0.95f : 0.15f + 0.3f * swirl * k;
-                    c.Add(new Color(1f, 1f, 1f, alpha));
+                    c.Add(WeaponColors.WithAlpha(k >= 0.88f ? WeaponColors.Cream : WeaponColors.CreamWhite, alpha));
                     uv.Add(new Vector2(0.5f, 0.5f));
                     n.Add(Vector3.up);
                 }
@@ -260,16 +270,16 @@ namespace PastaSurvivors
             return m;
         }
 
-        private Flat Get(string key, bool additive)
+        private Flat Get(string key, bool additive, bool preserveColor = false)
         {
-            string poolKey = key + (additive ? "+" : "");
+            string poolKey = key + (preserveColor ? ".weapon" : additive ? "+" : "");
             if (!pools.TryGetValue(poolKey, out var pool)) pools[poolKey] = pool = new Stack<Flat>();
             Flat f;
             if (pool.Count > 0) f = pool.Pop();
             else
             {
                 f = new Flat { key = poolKey };
-                f.go = Models.Static(Mesh(key), root, key, additive ? Mats.FxAdd : Mats.Telegraph, false);
+                f.go = Models.Static(Mesh(key), root, key, preserveColor ? Mats.FxAlpha : additive ? Mats.FxAdd : Mats.Telegraph, false);
                 f.tr = f.go.transform;
                 f.mr = f.go.GetComponent<MeshRenderer>();
             }
@@ -279,27 +289,27 @@ namespace PastaSurvivors
             return f;
         }
 
-        public void Ring(Vector3 pos, float radius, Color color, float duration, float width)
+        public void Ring(Vector3 pos, float radius, Color color, float duration, float width, bool preserveColor = false)
         {
             float ratio = Mathf.Clamp(1f - width / Mathf.Max(radius, 0.1f), 0.5f, 0.95f);
             int q = Mathf.RoundToInt(ratio * 20f) * 5;
-            var f = Get("ring" + q, true);
+            var f = Get("ring" + q, true, preserveColor);
             f.mode = 0; f.pos = pos; f.radius = radius; f.duration = duration; f.color = color;
             f.tr.SetPositionAndRotation(pos, Quaternion.identity);
             Update1(f);
         }
 
-        public void Snap(Vector3 origin, Vector3 dir, float radius, float angle, bool evolved)
+        public void Snap(Vector3 origin, Vector3 dir, float radius, float angle, bool evolved, bool napolitan = false)
         {
             int a = Mathf.RoundToInt(angle / 10f) * 10;
-            var f = Get("sector" + a, true);
+            var f = Get("sector" + a, true, !napolitan);
             f.mode = 1; f.pos = origin + Vector3.up * 0.08f; f.radius = radius; f.duration = 0.28f;
-            f.color = evolved ? new Color(1f, 0.55f, 0.2f, 0.85f) : new Color(1f, 0.85f, 0.4f, 0.7f);
+            f.color = napolitan ? new Color(1f, 0.12f, 0.04f, 0.9f) : WeaponColors.WithAlpha(WeaponColors.Spaghetti, evolved ? 0.65f : 0.5f);
             f.tr.SetPositionAndRotation(f.pos, Quaternion.LookRotation(dir));
             Update1(f);
-            var arc = Get("arc" + a, true);
+            var arc = Get("arc" + a, true, !napolitan);
             arc.mode = 1; arc.pos = f.pos + Vector3.up * 0.02f; arc.radius = radius; arc.duration = 0.34f;
-            arc.color = new Color(1f, 0.95f, 0.7f, 0.95f);
+            arc.color = napolitan ? new Color(1f, 0.45f, 0.08f, 0.95f) : WeaponColors.WithAlpha(WeaponColors.Spaghetti, 0.95f);
             arc.tr.SetPositionAndRotation(arc.pos, Quaternion.LookRotation(dir));
             Update1(arc);
             // Pasta shards spray into the cone.
@@ -311,33 +321,41 @@ namespace PastaSurvivors
                 ep.velocity = d * Random.Range(6f, 12f) + Vector3.up * Random.Range(1f, 4f);
                 ep.startSize = Random.Range(0.1f, 0.18f);
                 ep.startLifetime = Random.Range(0.35f, 0.6f);
-                ep.startColor = Models.PastaGold;
+                ep.startColor = napolitan ? new Color(1f, 0.2f, 0.04f) : WeaponColors.Highlight(WeaponColors.Spaghetti);
                 ep.rotation3D = new Vector3(Random.value * 360f, Random.value * 360f, 0);
-                crumbs.Emit(ep, 1);
+                (napolitan ? crumbs : weaponCrumbs).Emit(ep, 1);
             }
+            if (napolitan)
+                for (int i = 0; i < 5; i++)
+                {
+                    var d = Quaternion.Euler(0, (i / 4f - 0.5f) * angle, 0) * dir;
+                    Burst(origin + d * radius * 0.7f + Vector3.up * 0.4f, new Color(1f, 0.3f, 0.05f), 3, 2.5f, 0.3f, FxKind.Spark);
+                }
             pokiCooldown -= 1f;
             if (pokiCooldown <= 0f)
             {
                 pokiCooldown = 3f;
-                if (G.Hud != null) G.Hud.Floating.Shout(origin + Vector3.up * 2.6f, "ポキッ!", new Color(1f, 0.9f, 0.4f), 1.1f);
+                if (G.Hud != null) G.Hud.Floating.Shout(origin + Vector3.up * 2.6f, "ポキッ!", napolitan ? new Color(1f, 0.9f, 0.4f) : WeaponColors.Highlight(WeaponColors.Spaghetti), 1.1f);
             }
         }
 
-        public void Slam(Vector3 center, float radius)
+        public void Slam(Vector3 center, float radius, bool lasagna = false)
         {
-            Ring(center + Vector3.up * 0.08f, radius, new Color(1f, 0.8f, 0.4f, 0.85f), 0.4f, radius * 0.25f);
-            var disc = Get("disc", true);
+            Ring(center + Vector3.up * 0.08f, radius, lasagna ? WeaponColors.WithAlpha(WeaponColors.Lasagna, 0.95f) : new Color(1f, 0.8f, 0.4f, 0.85f), 0.4f, radius * 0.25f, lasagna);
+            if (lasagna) Ring(center + Vector3.up * 0.1f, radius * 0.86f, WeaponColors.Highlight(WeaponColors.Lasagna), 0.4f, radius * 0.06f, true);
+            var disc = Get("disc", true, lasagna);
             disc.mode = 0; disc.pos = center + Vector3.up * 0.06f; disc.radius = radius; disc.duration = 0.25f;
-            disc.color = new Color(1f, 0.9f, 0.6f, 0.35f);
+            disc.color = lasagna ? WeaponColors.WithAlpha(WeaponColors.Lasagna, 0.2f) : new Color(1f, 0.9f, 0.6f, 0.35f);
             disc.tr.SetPositionAndRotation(disc.pos, Quaternion.identity);
             Update1(disc);
             for (int i = 0; i < 14; i++)
             {
                 float a = i / 14f * Mathf.PI * 2f;
                 var p = center + new Vector3(Mathf.Cos(a), 0.2f, Mathf.Sin(a)) * radius * 0.85f;
-                Burst(p, new Color(0.85f, 0.78f, 0.65f, 0.7f), 1, 1.2f, 1.2f, FxKind.Puff);
+                Burst(p, lasagna ? WeaponColors.WithAlpha(WeaponColors.Highlight(WeaponColors.Lasagna), 0.7f) : new Color(0.85f, 0.78f, 0.65f, 0.7f), 1, 1.2f, 1.2f, FxKind.Puff);
             }
-            Burst(center + Vector3.up * 0.5f, Models.PastaGold, 12, 7f, 0.25f, FxKind.Crumb);
+            if (lasagna) WeaponBurst(center + Vector3.up * 0.5f, WeaponColors.Lasagna, 12, 7f, 0.25f);
+            else Burst(center + Vector3.up * 0.5f, Models.PastaGold, 12, 7f, 0.25f, FxKind.Crumb);
         }
 
         public void Sweep(Vector3 pos, Vector3 dir, float radius, float angle, Color color)
@@ -376,7 +394,7 @@ namespace PastaSurvivors
             float pulse = 1f + Mathf.Sin(Time.time * 5f) * 0.02f + auraFlash * 0.05f;
             aura.transform.SetPositionAndRotation(G.Arena.OnGround(pos) + Vector3.up * 0.05f, Quaternion.Euler(0, Time.time * 30f, 0));
             aura.transform.localScale = new Vector3(radius * pulse, 1f, radius * pulse);
-            var c = evolved ? new Color(1f, 0.88f, 0.5f, 0.5f) : new Color(1f, 0.96f, 0.84f, 0.42f);
+            var c = WeaponColors.WithAlpha(WeaponColors.CreamWhite, evolved ? 0.7f : 0.6f);
             c.a = Mathf.Min(1f, c.a + auraFlash * 0.4f);
             mpb.SetColor("_BaseColor", c);
             auraRenderer.SetPropertyBlock(mpb);
@@ -384,17 +402,17 @@ namespace PastaSurvivors
 
         /// <summary>
         /// One Carbonara hit: the sauce flashes, a wave of cream rolls out to the rim, and every Italian in reach gets
-        /// splattered with cream and bits of guanciale.
+        /// splattered with white cream and mint-colored accents.
         /// </summary>
         public void CreamWave(Vector3 pos, float radius, IReadOnlyList<Enemy> hit, int count, bool evolved)
         {
             auraFlash = 1f;
-            Ring(G.Arena.OnGround(pos) + Vector3.up * 0.09f, radius, evolved ? new Color(1f, 0.85f, 0.45f, 0.9f) : new Color(1f, 0.95f, 0.82f, 0.85f), 0.35f, radius * 0.2f);
+            Ring(G.Arena.OnGround(pos) + Vector3.up * 0.09f, radius, WeaponColors.WithAlpha(WeaponColors.Cream, evolved ? 1f : 0.9f), 0.35f, radius * 0.2f, true);
             for (int i = 0; i < count && i < 14; i++)
             {
                 var e = hit[i];
-                Burst(e.Center + Vector3.up * 0.3f, new Color(1f, 0.97f, 0.88f), 3, 3f, 0.13f, FxKind.Crumb);
-                if (i % 3 == 0) Burst(e.Center + Vector3.up * 0.3f, new Color(0.72f, 0.34f, 0.26f), 1, 3f, 0.1f, FxKind.Crumb);
+                WeaponBurst(e.Center + Vector3.up * 0.3f, WeaponColors.CreamWhite, 3, 3f, 0.13f);
+                if (i % 3 == 0) WeaponBurst(e.Center + Vector3.up * 0.3f, WeaponColors.Cream, 1, 3f, 0.1f);
             }
         }
 

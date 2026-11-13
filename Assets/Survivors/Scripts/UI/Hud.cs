@@ -19,7 +19,7 @@ namespace PastaSurvivors
         public bool ShowFps;
         private readonly Queue<(string, Color)> bannerQueue = new Queue<(string, Color)>();
         private Image mainFrame, crossDot, crossRing, radarBg;
-        private Text mainText, switchHint, mainTag;
+        private Text mainText, switchHint, mainTag, craftHint;
         private RectTransform radar;
         private readonly List<Image> radarDots = new List<Image>();
         private float mainT;
@@ -73,6 +73,8 @@ namespace PastaSurvivors
             mainTag = UiKit.Label(mainFrame.transform, "Tag", "主", 16, new Color(0.25f, 0.12f, 0.02f), TextAnchor.UpperLeft, new Vector2(0f, 1f), new Vector2(3, 1), new Vector2(30, 22), FontStyle.Bold, false, new Vector2(0f, 1f));
             switchHint = UiKit.Label(root, "SwitchHint", "Q/E 主武器切替　V 視点　G/R3 身振り設定　左クリック長押し 移動", 17, new Color(1f, 1f, 1f, 0.6f), TextAnchor.UpperLeft, new Vector2(0f, 1f), new Vector2(20, -154), new Vector2(600, 26), FontStyle.Normal, true, new Vector2(0f, 1f));
             mainText = UiKit.Label(root, "MainText", "", 24, UiKit.Gold, TextAnchor.UpperLeft, new Vector2(0f, 1f), new Vector2(20, -182), new Vector2(380, 120), FontStyle.Bold, true, new Vector2(0f, 1f));
+            craftHint = UiKit.Label(root, "CraftHint", "", 21, new Color(0.5f, 1f, 0.8f), TextAnchor.UpperLeft,
+                new Vector2(0f, 1f), new Vector2(20, -318), new Vector2(530, 72), FontStyle.Normal, pivot: new Vector2(0f, 1f));
 
             // First person: crosshair and a radar for Italians sneaking up from behind.
             crossRing = UiKit.Img(root, "CrossRing", new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(34, 34), new Color(1f, 1f, 1f, 0.5f), UiKit.Pill);
@@ -235,7 +237,7 @@ namespace PastaSurvivors
         public void MainSwitched(Weapon w)
         {
             if (w == null) return;
-            mainText.text = $"主武器：{w.DisplayName}\n<size=19><color=#fff2d0>{w.def.mainTrait}</color></size>";
+            mainText.text = $"主武器：{w.DisplayName}\n<size=19><color=#fff2d0>{(w.Recipe != null ? w.Recipe.desc : w.def.mainTrait)}</color></size>";
             mainT = 3f;
         }
 
@@ -332,6 +334,7 @@ namespace PastaSurvivors
             {
                 if (pk.kind == PickupKind.Special) Dot(pk.pos, new Color(1f, 0.8f, 0.2f), pulse);
                 else if (pk.kind == PickupKind.Chest) Dot(pk.pos, new Color(1f, 0.95f, 0.4f), 10f);
+                else if (pk.kind == PickupKind.Ingredient) Dot(pk.pos, new Color(0.3f, 1f, 0.8f), 10f);
             }
             foreach (var e in G.Enemies.Active)
             {
@@ -373,6 +376,7 @@ namespace PastaSurvivors
             {
                 if (pk.kind == PickupKind.Special) Point(pk.pos, Icons.Get(GameData.Special(pk.special).icon), UiKit.Gold);
                 else if (pk.kind == PickupKind.Chest) Point(pk.pos, Icons.Get("coin"), new Color(1f, 0.95f, 0.5f));
+                else if (pk.kind == PickupKind.Ingredient && p.Crafting.Needs(pk.ingredient)) Point(pk.pos, Icons.Get(CraftingData.Icon(pk.ingredient)), new Color(0.3f, 1f, 0.8f));
             }
             var boss = G.Enemies.Boss;
             if (boss != null && boss.active && !boss.fleeing) Point(boss.pos, Icons.Get("heart"), new Color(1f, 0.3f, 0.3f));
@@ -401,13 +405,13 @@ namespace PastaSurvivors
             foreach (var pk in G.Pickups.Active)
             {
                 if (n >= radarDots.Count) break;
-                if (pk.kind != PickupKind.Chest && pk.kind != PickupKind.Pizza && pk.kind != PickupKind.Special) continue;
+                if (pk.kind != PickupKind.Chest && pk.kind != PickupKind.Pizza && pk.kind != PickupKind.Special && pk.kind != PickupKind.Ingredient) continue;
                 var d = inv * (pk.pos - p.Position);
                 if (new Vector2(d.x, d.z).magnitude > range) continue;
                 var dot = radarDots[n++];
                 dot.enabled = true;
                 dot.rectTransform.anchoredPosition = new Vector2(d.x, d.z) / range * half;
-                dot.color = pk.kind == PickupKind.Chest ? UiKit.Gold : pk.kind == PickupKind.Special ? new Color(1f, 0.6f, 0.1f) : new Color(0.4f, 1f, 0.6f);
+                dot.color = pk.kind == PickupKind.Chest ? UiKit.Gold : pk.kind == PickupKind.Special ? new Color(1f, 0.6f, 0.1f) : pk.kind == PickupKind.Ingredient ? new Color(0.3f, 1f, 0.8f) : new Color(0.4f, 1f, 0.6f);
                 dot.rectTransform.sizeDelta = pk.kind == PickupKind.Special ? new Vector2(16f, 16f) : new Vector2(12f, 12f);
             }
             for (int i = n; i < radarDots.Count; i++)
@@ -464,7 +468,7 @@ namespace PastaSurvivors
                 {
                     var w = p.Weapons[i];
                     weaponIcons[i].enabled = true;
-                    weaponIcons[i].sprite = Icons.Get(w.evolved ? w.def.evoIcon : w.def.icon);
+                    weaponIcons[i].sprite = Icons.Get(w.Icon);
                     weaponLevels[i].text = w.evolved ? "★" : w.level.ToString();
                     weaponFrames[i].color = w.evolved ? new Color(0.5f, 0.3f, 0.05f, 0.9f) : UiKit.Ink;
                 }
@@ -495,6 +499,9 @@ namespace PastaSurvivors
             else UpdateMinimap(p);
             UpdateDistrict(p);
             UpdateSpecial(p);
+            int ready = p.Crafting.ReadyCount;
+            craftHint.text = "C / パッドX  食材クラフト" + (ready > 0 ? "  合成可能 " + ready : "") + "\n緑の光の食材を拾って合成しよう";
+            craftHint.color = ready > 0 ? new Color(0.5f, 1f, 0.8f) : new Color(1f, 1f, 1f, 0.6f);
             UpdatePointers(p);
             if (G.Fx != null) G.Fx.Reticle(p.MouseGround, !firstPerson && p.MouseAiming && G.Playing);
 

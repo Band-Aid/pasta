@@ -111,6 +111,30 @@ namespace PastaSurvivors
                 case "pizza":
                     Pizza(16, 16);
                     break;
+                case "napolitan":
+                    for (int i = 0; i < 5; i++)
+                    {
+                        Line(4 + i * 2, 7, 12 + i * 2, 15, 2f, i % 2 == 0 ? Rd : Or);
+                        Line(18 + i * 2, 19, 25 + i * 2, 26, 2f, i % 2 == 0 ? Rd : Or);
+                    }
+                    Spark(16, 17, YL);
+                    break;
+                case "ragepizza":
+                    Pizza(16, 16);
+                    Spark(6, 26, Rd); Spark(26, 26, Or);
+                    break;
+                case "pineapple":
+                    Ellipse(16, 12, 8, 10, YD);
+                    Ellipse(16, 13, 6, 8, Y);
+                    for (int i = 0; i < 3; i++)
+                    {
+                        Line(9, 7 + i * 5, 22, 15 + i * 4, 1f, YD);
+                        Line(23, 7 + i * 5, 10, 15 + i * 4, 1f, YD);
+                    }
+                    Tri(new Vector2(16, 20), new Vector2(5, 29), new Vector2(13, 26), Gr);
+                    Tri(new Vector2(16, 20), new Vector2(27, 29), new Vector2(19, 26), GrD);
+                    Tri(new Vector2(13, 22), new Vector2(16, 31), new Vector2(19, 22), Gr);
+                    break;
                 case "meteor":
                     Tri(new Vector2(2, 30), new Vector2(14, 20), new Vector2(8, 14), Or);
                     Tri(new Vector2(6, 30), new Vector2(18, 24), new Vector2(12, 18), Y);

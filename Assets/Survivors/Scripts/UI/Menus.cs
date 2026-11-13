@@ -85,6 +85,8 @@ namespace PastaSurvivors
         private void Update()
         {
             if (!Open) return;
+            if (Current == "crafting" && Time.unscaledTime - openedAt > 0.25f && (Controls.Craft() || Controls.Pause()))
+            { G.Game.CloseCrafting(); return; }
             if (GestureSettingsOpen) { UpdateGestureSettings(); return; }
             if (AudioSettingsOpen) { UpdateAudioSettings(); return; }
             if (Current == "pause") UpdateMouseSensitivity();
@@ -161,6 +163,7 @@ namespace PastaSurvivors
                 "・<color=#a0e0ff>地形を使おう</color>：壁・生垣・柱はスリッパなどの投擲を防ぐ。路地や橋に誘い込めば範囲攻撃が刺さる。\n" +
                 "　回復の泉（緑の輪）は立つとHP回復、市場（橙の輪）はワイン樽がよく出る。ローマの車道とナポリの火山弾はイタリア人も巻き込む。\n" +
                 "・武器をLv8にして対応するパッシブを持った状態で宝箱を開けると進化。宝箱はノンナとボスが落とす。\n" +
+                "・<color=#80ffcc>クラフト（C / パッドX）</color>：緑の光の食材を拾い、パスタ＋ケチャップ／ピザ生地＋パイナップルを合成。所持武器も加工できる。\n" +
                 "・ダッシュ（Space/Shift/A）は短時間無敵。10分生き延びるとボス。集めたコインでパワーアップ。\n" +
                 "・V（View）で見下ろし/一人称を切り替え。";
             UiKit.Label(c, "B", body, 27, UiKit.Cream, TextAnchor.UpperLeft, new Vector2(0.5f, 0.5f), new Vector2(0, 10), new Vector2(1500, 760), FontStyle.Normal);
@@ -331,14 +334,53 @@ namespace PastaSurvivors
                 $"最大HP  {p.MaxHp:0}\nパワー  {p.Might * 100:0}%\n範囲  {p.AreaMul * 100:0}%\nクールダウン  {p.CooldownMul * 100:0}%\n" +
                 $"発射数  +{p.AmountBonus}\n移動速度  {p.MoveSpeed:0.0}\n回収範囲  {p.MagnetRadius:0.0}m\n成長  {p.GrowthMul * 100:0}%\n装甲  {p.Armor:0}\n復活  {p.Revivals}";
             UiKit.Label(c, "Stats", stats, 28, Color.white, TextAnchor.UpperLeft, new Vector2(0.5f, 0.5f), new Vector2(360, 40), new Vector2(400, 600), FontStyle.Normal);
-            Button(c, "再開", new Vector2(0.5f, 0f), new Vector2(-640, 110), new Vector2(300, 76), resume);
-            Button(c, "視点：" + (SaveData.FirstPerson ? "一人称" : "見下ろし"), new Vector2(0.5f, 0f), new Vector2(-320, 110), new Vector2(300, 76), toggleView);
-            Button(c, "身振り設定（再開）", new Vector2(0.5f, 0f), new Vector2(0, 110), new Vector2(300, 76), () => G.Game.OpenGestureSettings(), 28);
-            Button(c, "音量設定", new Vector2(0.5f, 0f), new Vector2(320, 110), new Vector2(300, 76), () => G.Game.OpenAudioSettings());
-            Button(c, "タイトルへ戻る", new Vector2(0.5f, 0f), new Vector2(640, 110), new Vector2(300, 76), quit);
+            Button(c, "再開", new Vector2(0.5f, 0f), new Vector2(-750, 110), new Vector2(280, 76), resume);
+            Button(c, "視点：" + (SaveData.FirstPerson ? "一人称" : "見下ろし"), new Vector2(0.5f, 0f), new Vector2(-450, 110), new Vector2(280, 76), toggleView);
+            Button(c, "クラフト（C / X）", new Vector2(0.5f, 0f), new Vector2(-150, 110), new Vector2(280, 76), () => G.Game.OpenCrafting(), 28);
+            Button(c, "身振り設定（再開）", new Vector2(0.5f, 0f), new Vector2(150, 110), new Vector2(280, 76), () => G.Game.OpenGestureSettings(), 28);
+            Button(c, "音量設定", new Vector2(0.5f, 0f), new Vector2(450, 110), new Vector2(280, 76), () => G.Game.OpenAudioSettings());
+            Button(c, "タイトルへ戻る", new Vector2(0.5f, 0f), new Vector2(750, 110), new Vector2(280, 76), quit);
             AddMouseSensitivitySlider(c);
-            Nav.columns = 5;
+            Nav.columns = 6;
             Nav.onCancel = resume;
+        }
+
+        public void ShowCrafting()
+        {
+            var c = Begin("crafting", 0.9f);
+            var p = G.Player;
+            UiKit.Label(c, "Title", "食材クラフト", 64, UiKit.Gold, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 1f), new Vector2(0, -90), new Vector2(1200, 86));
+            UiKit.Label(c, "Hint", "食材を1個ずつ合成。所持中の対応武器はベース食材の代わりに使えます。\n加工はレベル・進化を引き継ぎます。食材と合成効果は今回のランのみ。", 24, UiKit.Cream, TextAnchor.MiddleCenter,
+                new Vector2(0.5f, 1f), new Vector2(0, -183), new Vector2(1500, 76), FontStyle.Normal);
+            for (int i = 0; i < 4; i++)
+            {
+                var id = (IngredientId)i;
+                var row = UiKit.Img(c, "Ingredient" + id, new Vector2(0.5f, 1f), new Vector2((i - 1.5f) * 330f, -294), new Vector2(310, 74), UiKit.Ink);
+                UiKit.Img(row.transform, "Icon", new Vector2(0f, 0.5f), new Vector2(14, 0), new Vector2(50, 50), Color.white, Icons.Get(CraftingData.Icon(id)), new Vector2(0f, 0.5f));
+                UiKit.Label(row.transform, "Count", CraftingData.Name(id) + " ×" + p.Crafting.Count(id), 25, UiKit.Cream, TextAnchor.MiddleLeft,
+                    new Vector2(0f, 0.5f), new Vector2(76, 0), new Vector2(222, 60), pivot: new Vector2(0f, 0.5f));
+            }
+            for (int i = 0; i < CraftingData.Recipes.Length; i++)
+            {
+                var recipe = CraftingData.Recipes[i];
+                var weapon = p.GetWeapon(recipe.weapon);
+                bool ready = p.Crafting.CanCraft(recipe, out var reason);
+                var card = UiKit.Img(c, recipe.name, new Vector2(0.5f, 0.5f), new Vector2((i - 0.5f) * 700f, -50), new Vector2(660, 340), UiKit.Ink);
+                UiKit.Img(card.transform, "Icon", new Vector2(0f, 1f), new Vector2(24, -24), new Vector2(92, 92), Color.white, Icons.Get(recipe.icon), new Vector2(0f, 1f));
+                UiKit.Label(card.transform, "Name", recipe.name, 42, recipe.color, TextAnchor.MiddleLeft,
+                    new Vector2(0f, 1f), new Vector2(140, -20), new Vector2(490, 64), pivot: new Vector2(0f, 1f));
+                string basis = weapon != null ? "所持武器（Lv" + weapon.level + (weapon.evolved ? "・進化済み" : "") + "）" : CraftingData.Name(recipe.basis) + " ×1";
+                UiKit.Label(card.transform, "Recipe", basis + " ＋ " + CraftingData.Name(recipe.topping) + " ×1", 23, UiKit.Cream, TextAnchor.MiddleLeft,
+                    new Vector2(0f, 1f), new Vector2(140, -83), new Vector2(490, 48), FontStyle.Normal, pivot: new Vector2(0f, 1f));
+                UiKit.Label(card.transform, "Description", recipe.desc, 27, UiKit.Cream, TextAnchor.UpperLeft,
+                    new Vector2(0.5f, 1f), new Vector2(0, -146), new Vector2(600, 94), FontStyle.Normal, pivot: new Vector2(0.5f, 1f));
+                Button(card.transform, reason, new Vector2(0.5f, 0f), new Vector2(0, 26), new Vector2(600, 66), () => G.Game.Craft(recipe), 25, ready,
+                    ready ? new Color(0.2f, 0.4f, 0.25f, 1f) : new Color(0.16f, 0.12f, 0.12f, 1f));
+            }
+            Button(c, "戻る（C / Esc / X / B）", new Vector2(0.5f, 0f), new Vector2(0, 105), new Vector2(560, 72), () => G.Game.CloseCrafting(), 30);
+            Nav.columns = 2;
+            Nav.onCancel = () => G.Game.CloseCrafting();
         }
 
         private void AddMouseSensitivitySlider(Transform parent)

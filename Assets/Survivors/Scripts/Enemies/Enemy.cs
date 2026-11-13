@@ -77,6 +77,11 @@ namespace PastaSurvivors
         public float dominoTime, dominoDamage;
         public Vector3 dominoVel;
 
+        // Crafted pineapple pizza: a short, straight charge through the other Italians.
+        public float rageTime, rageWindup, rageCooldown, rageDamage, rageTrail;
+        public Vector3 rageDir;
+        public int rageSlot;
+
         public bool IsBoss => def.behavior == Behavior.Boss;
         public bool IsElite => def.behavior == Behavior.Elite;
         public bool IsProp => def.behavior == Behavior.Prop;
@@ -129,7 +134,7 @@ namespace PastaSurvivors
             if (r.torso == null || dt <= 0f) return;
             bool canGesture = approaching && moveSpeed > 0.1f && active
                 && !frozen && !fleeing && flattened <= 0f && fear <= 0f && stun <= 0f && flash <= 0f
-                && dominoTime <= 0f && knock.sqrMagnitude < 0.04f && state == 0
+                && dominoTime <= 0f && rageTime <= 0f && knock.sqrMagnitude < 0.04f && state == 0
                 && !IsBoss && !IsProp && !r.seated && (r.freeHandL || r.freeHandR);
             // Never resume a half-finished gesture after an attack, hit or loss of approach.
             if (!canGesture) InterruptApproachGesture();
@@ -154,7 +159,7 @@ namespace PastaSurvivors
                 return;
             }
             float amp = Mathf.Clamp01(moveSpeed / 2f);
-            bool panic = fleeing || fear > 0f;
+            bool panic = fleeing || fear > 0f || rageTime > 0f;
             float move = Mathf.Max(amp, panic ? 1f : 0f);
             float rate = panic ? 22f : (5f + moveSpeed * 2.4f) * g.cadence;
             walkPhase += dt * rate;

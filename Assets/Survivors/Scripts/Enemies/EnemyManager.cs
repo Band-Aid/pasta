@@ -86,6 +86,8 @@ namespace PastaSurvivors
             e.stateTimer = def.IsBoss ? 2.5f : 0f;
             e.attackTimer = UnityEngine.Random.Range(0.5f, def.attackCooldown);
             e.dominoTime = 0f;
+            e.rageTime = e.rageWindup = e.rageCooldown = e.rageDamage = e.rageTrail = 0f;
+            e.rageDir = Vector3.zero;
             e.lift = 0f; e.spin = 0f; e.fleeT = 0f;
             e.gesture = UnityEngine.Random.value * 10f;
             e.ResetApproachGesture();
@@ -191,6 +193,7 @@ namespace PastaSurvivors
                 e.stun -= dt; e.slow -= dt; e.buff -= dt; e.attackTimer -= dt; e.fear -= dt;
                 e.bossCcCooldown = Mathf.Max(0f, e.bossCcCooldown - dt);
                 e.slip -= dt; e.slipCooldown -= dt;
+                e.rageCooldown -= dt;
 
                 Vector3 toP = pp - e.pos; toP.y = 0f;
                 float dist = toP.magnitude;
@@ -220,6 +223,10 @@ namespace PastaSurvivors
                     // Combat CC uses ApplyStun: a boss only reaches this branch for
                     // the one-off, scripted wait when its second form appears.
                     move = Vector3.zero;
+                }
+                else if (e.rageTime > 0f)
+                {
+                    move = TickRage(e, dt, now);
                 }
                 else if (e.fear > 0f && !e.IsBoss)
                 {
@@ -259,7 +266,7 @@ namespace PastaSurvivors
                 else if (e.state != 2 && dist > 0.1f) e.facing = Vector3.Slerp(e.facing, dirP, 1f - Mathf.Exp(-6f * dt));
 
                 // Contact damage.
-                if (player != null && e.flattened <= 0f && e.dominoTime <= 0f && dist < e.radius + pr + 0.05f) player.TakeDamage(e.damage, e.pos, (e.state == 2 ? "charge:" : "touch:") + e.def.kind);
+                if (player != null && e.flattened <= 0f && e.dominoTime <= 0f && e.rageTime <= 0f && dist < e.radius + pr + 0.05f) player.TakeDamage(e.damage, e.pos, (e.state == 2 ? "charge:" : "touch:") + e.def.kind);
 
                 // Stragglers get recycled ahead of the player (Vampire Survivors style).
                 if (!e.IsBoss && !e.IsElite && dist > 44f && G.Waves != null)
@@ -377,6 +384,7 @@ namespace PastaSurvivors
             e.flattenDir = dir;
             e.stun = Mathf.Max(e.stun, Enemy.FlattenTime);
             e.slip = e.fear = e.dominoTime = e.spin = e.lift = 0f;
+            e.rageTime = e.rageWindup = 0f;
             e.dominoVel = Vector3.zero;
             e.state = 0;
             e.knock += dir * 8f;
@@ -390,9 +398,53 @@ namespace PastaSurvivors
         {
             if (e.IsBoss || e.IsProp || e.fleeing || e.flattened > 0f) return;
             e.InterruptApproachGesture();
+            e.rageTime = 0f;
             e.dominoVel = velocity;
             e.dominoTime = 0.45f;
             e.dominoDamage = damage;
+        }
+
+        public void Enrage(Enemy e, Vector3 direction, float damage, int slot)
+        {
+            if (!e.Targetable || e.IsBoss || e.flattened > 0f || e.rageCooldown > 0f || e.dominoTime > 0f) return;
+            direction.y = 0f;
+            if (direction.sqrMagnitude < 0.001f) direction = e.facing;
+            e.InterruptApproachGesture();
+            e.rageDir = direction.normalized;
+            e.rageTime = 1.1f;
+            e.rageWindup = 0.22f;
+            e.rageCooldown = 2.8f;
+            e.rageDamage = damage;
+            e.rageSlot = slot;
+            e.rageTrail = 0f;
+            e.state = 0;
+            e.fear = e.stun = 0f;
+            e.knock = Vector3.zero;
+            ShoutCustom(e, "ANANAS?!", new Color(1f, 0.35f, 0.1f));
+            G.Fx.Ring(e.pos + Vector3.up * 0.1f, 1.1f, new Color(1f, 0.3f, 0.1f, 0.9f), 0.3f, 0.2f);
+        }
+
+        private Vector3 TickRage(Enemy e, float dt, float now)
+        {
+            e.facing = e.rageDir;
+            if (e.rageWindup > 0f) { e.rageWindup -= dt; return Vector3.zero; }
+            e.rageTime = Mathf.Max(0f, e.rageTime - dt);
+            e.rageTrail -= dt;
+            if (e.rageTrail <= 0f)
+            {
+                e.rageTrail = 0.12f;
+                G.Fx.Burst(e.Center, new Color(1f, 0.55f, 0.12f), 2, 2f, 0.2f, FxKind.Spark);
+            }
+            int n = Query(e.pos, e.radius + 0.7f, scratch);
+            for (int i = 0; i < n; i++)
+            {
+                var other = scratch[i];
+                if (other == e || other.IsProp || other.immune[Enemy.SlotDomino] > now) continue;
+                other.immune[Enemy.SlotDomino] = now + 0.45f;
+                Damage(other, e.rageDamage, e.rageDir, 6f, e.rageSlot);
+                ApplyStun(other, 0.25f);
+            }
+            return e.rageDir * 13f;
         }
 
         private Vector3 TickThrower(Enemy e, float dt, Vector3 dirP, float dist, float speed)
@@ -808,6 +860,7 @@ namespace PastaSurvivors
             e.state = 0;
             e.dominoTime = 0f;
             e.spin = 0f;
+            e.rageTime = 0f;
             HostileCount--;
             Kills++;
             var away = e.pos - (G.Player != null ? G.Player.Position : Vector3.zero);

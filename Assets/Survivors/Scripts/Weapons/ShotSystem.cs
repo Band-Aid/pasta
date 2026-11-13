@@ -15,6 +15,9 @@ namespace PastaSurvivors
         public GameObject go;
         public Transform tr;
         public MeshRenderer mr;
+        public TrailRenderer trail;
+        public bool weaponFx;
+        public Color fxColor;
         public Vector3 pos, vel, dir, origin, target;
         public float radius, damage, knock, life, maxLife, speed, spinRate, spin, scale = 1f;
         public int pierce, slot, hitCount;
@@ -28,6 +31,7 @@ namespace PastaSurvivors
         public bool sticky;
         /// <summary>Zone of mayonnaise: Italians who step in it slip and fall.</summary>
         public bool slippery;
+        public bool enrages;
         public int bounces;
         public float windup;
         public HashSet<int> wheelHits;
@@ -82,6 +86,10 @@ namespace PastaSurvivors
             s.slow = 0f;
             s.sticky = false;
             s.slippery = false;
+            s.enrages = false;
+            s.weaponFx = false;
+            s.mr.SetPropertyBlock(null);
+            if (s.trail != null) { s.trail.emitting = false; s.trail.Clear(); }
             s.windup = 0f;
             s.wheelHits?.Clear();
             s.spin = UnityEngine.Random.value * 360f;
@@ -89,6 +97,37 @@ namespace PastaSurvivors
             s.go.SetActive(true);
             Active.Add(s);
             return s;
+        }
+
+        /// <summary>Keep the food model, with a short colored ribbon that makes its path readable.</summary>
+        public void StyleWeapon(Shot s, Color color, float width = 0.16f, float duration = 0.22f)
+        {
+            s.weaponFx = true;
+            s.fxColor = color;
+            if (s.trail == null)
+            {
+                s.trail = s.go.AddComponent<TrailRenderer>();
+                s.trail.sharedMaterial = Mats.FxAlpha;
+                s.trail.autodestruct = false;
+                s.trail.minVertexDistance = 0.1f;
+                s.trail.numCapVertices = 2;
+                s.trail.numCornerVertices = 2;
+                s.trail.shadowCastingMode = ShadowCastingMode.Off;
+                s.trail.receiveShadows = false;
+                s.trail.alignment = LineAlignment.View;
+            }
+            s.trail.Clear();
+            s.trail.time = duration;
+            s.trail.startWidth = width;
+            s.trail.endWidth = width * 0.15f;
+            s.trail.startColor = WeaponColors.WithAlpha(color, 0.95f);
+            s.trail.endColor = WeaponColors.WithAlpha(color, 0f);
+            s.trail.emitting = true;
+            mpb.Clear();
+            mpb.SetColor("_BaseColor", Color.white);
+            mpb.SetFloat("_Rim", 0.5f);
+            mpb.SetFloat("_Emission", 0.12f);
+            s.mr.SetPropertyBlock(mpb);
         }
 
         public Shot Fire(ShotKind kind, Motion motion, Vector3 pos, Vector3 vel, float damage, float radius, float life, int slot)
@@ -267,6 +306,7 @@ namespace PastaSurvivors
         private void Recycle(Shot s)
         {
             s.active = false;
+            if (s.trail != null) { s.trail.emitting = false; s.trail.Clear(); }
             s.owner = null;
             s.ownerUid = 0;
             s.onEnd = null;
@@ -299,7 +339,12 @@ namespace PastaSurvivors
                         break;
                     case Motion.Straight:
                         s.pos += s.vel * dt;
-                        if (G.Arena.ShotBlocked(s.pos)) { end = true; G.Fx.Burst(s.pos, s.hostile ? new Color(0.9f, 0.85f, 0.8f) : Models.PastaGold, 4, 3f, 0.15f, FxKind.Crumb); }
+                        if (G.Arena.ShotBlocked(s.pos))
+                        {
+                            end = true;
+                            if (s.weaponFx) G.Fx.WeaponBurst(s.pos, s.fxColor, 4, 3f, 0.15f);
+                            else G.Fx.Burst(s.pos, s.hostile ? new Color(0.9f, 0.85f, 0.8f) : Models.PastaGold, 4, 3f, 0.15f, FxKind.Crumb);
+                        }
                         break;
                     case Motion.Turret:
                         {
@@ -445,7 +490,7 @@ namespace PastaSurvivors
                 if (s.motion != Motion.Zone && s.motion != Motion.Turret) Place(s, dt);
                 if (end)
                 {
-                    if (s.explodeRadius > 0f) Explode(s.pos, s.explodeRadius, s.explodeDamage, s.slot, s.explodeKnock, s.kind == ShotKind.Bazooka);
+                    if (s.explodeRadius > 0f) Explode(s.pos, s.explodeRadius, s.explodeDamage, s.slot, s.explodeKnock, s.kind == ShotKind.Bazooka, s.weaponFx ? s.fxColor : (Color?)null);
                     s.onEnd?.Invoke(s);
                     Recycle(s);
                     Active.RemoveAt(i);
@@ -557,14 +602,15 @@ namespace PastaSurvivors
         private void OnBounce(Shot s)
         {
             s.bounces++;
-            if (s.explodeRadius > 0f) Explode(s.pos, s.explodeRadius, s.explodeDamage, s.slot, s.explodeKnock, false);
+            if (s.explodeRadius > 0f) Explode(s.pos, s.explodeRadius, s.explodeDamage, s.slot, s.explodeKnock, false, s.weaponFx ? s.fxColor : (Color?)null);
         }
 
-        public void Explode(Vector3 pos, float radius, float damage, int slot, float knock = 3f, bool big = false)
+        public void Explode(Vector3 pos, float radius, float damage, int slot, float knock = 3f, bool big = false, Color? weaponColor = null)
         {
             var ground = G.Arena.OnGround(pos);
-            G.Fx.Ring(ground + Vector3.up * 0.1f, radius, new Color(1f, 0.85f, 0.2f, 0.8f), 0.35f, 0.35f);
-            G.Fx.Burst(pos, new Color(1f, 0.85f, 0.15f), big ? 40 : 10, big ? 12f : 7f, 0.22f, FxKind.Crumb);
+            G.Fx.Ring(ground + Vector3.up * 0.1f, radius, weaponColor.HasValue ? WeaponColors.WithAlpha(weaponColor.Value, 0.9f) : new Color(1f, 0.85f, 0.2f, 0.8f), 0.35f, 0.35f, weaponColor.HasValue);
+            if (weaponColor.HasValue) G.Fx.WeaponBurst(pos, weaponColor.Value, big ? 40 : 10, big ? 12f : 7f, 0.22f);
+            else G.Fx.Burst(pos, new Color(1f, 0.85f, 0.15f), big ? 40 : 10, big ? 12f : 7f, 0.22f, FxKind.Crumb);
             if (big)
             {
                 G.Fx.Slam(ground, radius);
@@ -604,7 +650,9 @@ namespace PastaSurvivors
                 }
                 var push = s.motion == Motion.Orbit ? (e.pos - G.Player.Position) : s.vel;
                 G.Enemies.Damage(e, s.damage, push, s.knock, s.slot);
-                G.Fx.Burst(s.pos, Models.PastaGold, 3, 3f, 0.15f, FxKind.Crumb);
+                if (s.enrages) G.Enemies.Enrage(e, s.vel, s.damage * 0.8f, s.slot);
+                if (s.weaponFx) G.Fx.WeaponBurst(s.pos, s.fxColor, 3, 3f, 0.15f);
+                else G.Fx.Burst(s.pos, Models.PastaGold, 3, 3f, 0.15f, FxKind.Crumb);
                 if (s.pierce < 900 && --s.pierce <= 0) return true;
             }
             return false;

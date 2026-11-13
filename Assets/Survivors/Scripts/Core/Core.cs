@@ -79,6 +79,13 @@ namespace PastaSurvivors
             return false;
         }
 
+        public static bool Craft()
+        {
+            if (Keyboard.current != null && Keyboard.current.cKey.wasPressedThisFrame) return true;
+            foreach (var pad in Gamepad.all) if (pad.buttonWest.wasPressedThisFrame) return true;
+            return false;
+        }
+
         public static bool Submit()
         {
             var kb = Keyboard.current;
